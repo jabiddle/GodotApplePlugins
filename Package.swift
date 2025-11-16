@@ -19,7 +19,7 @@ let package = Package(
     name: "GodotApplePlugins",
     platforms: [
         .iOS(.v17),
-        .macOS("14.0")
+        .macOS("14.0"),
     ],
     products: [
         .library(

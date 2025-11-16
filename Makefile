@@ -8,7 +8,6 @@ DERIVED_DATA ?= $(CURDIR)/build/xcodebuild
 WORKSPACE ?= .swiftpm/xcode/package.xcworkspace
 SCHEME ?= GodotApplePlugins
 FRAMEWORK_NAMES ?= GodotApplePlugins GameCenter
-#XCFRAMEWORK ?= $(CURDIR)/addons/$(FRAMEWORK_NAME)/bin/$(FRAMEWORK_NAME).xcframework
 XCODEBUILD ?= xcodebuild
 
 run:
@@ -35,7 +34,7 @@ xcframework-prep:
 	    done;  \
 	done; \
 
-xcframework: #xcframework-prep
+xcframework: xcframework-prep
 	for framework in $(FRAMEWORK_NAMES); do \
 		rm -rf $(CURDIR)/addons/$$framework/bin/$$framework.xcframework; \
 		$(XCODEBUILD) -create-xcframework \
@@ -46,6 +45,11 @@ xcframework: #xcframework-prep
 
 XCFRAMEWORK_GAMECENTER ?= $(CURDIR)/addons/GameCenter/bin/GameCenter.xcframework
 
+#
+# Quick hacks I use for rapid iteration
+#
+
+# This one just gets me a GameCenter I can test on desktop quickly
 q:
 	make xcframework FRAMEWORK_NAMES=GameCenter DERIVED_DATA=~/DerivedData/GodotApplePlugins-*
 
