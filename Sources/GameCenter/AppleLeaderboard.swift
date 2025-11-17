@@ -90,4 +90,28 @@ class AppleLeaderboard: RefCounted, @unchecked Sendable {
             }
         }
     }
+
+    @Callable
+    static func load_leaderboards(_ ids: PackedStringArray, callback: Callable) {
+        var sids: [String]?
+        if ids.count == 0 {
+            sids = nil
+        } else {
+            var result: [String] = []
+            for x in 0..<ids.count {
+                result.append(ids[x])
+            }
+            sids = result
+        }
+        GKLeaderboard.loadLeaderboards(IDs: sids) { result, error in
+            let wrapped = VariantArray()
+            if let result {
+                for l in result {
+                    let wrap = AppleLeaderboard(board: l)
+                    wrapped.append(Variant(wrap))
+                }
+            }
+            _ = callback.call(Variant(wrapped))
+        }
+    }
 }

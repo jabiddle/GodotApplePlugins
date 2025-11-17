@@ -12,16 +12,14 @@ func _ready() -> void:
 	print("ONREADY: local, player ID: %s" % local.game_player_id)
 
 func _on_button_pressed() -> void:
-	var instance = GameCenterManager.new()
-	var player = instance.local_player
+	var player = gameCenter.local_player
 	print("Got %s" % player)
 	print("Fetching the other object: %s" % player.is_authenticated)
-		
 	$auth_result.text = "Instantiated"
-	instance.authentication_error.connect(func(error: String) -> void:
+	gameCenter.authentication_error.connect(func(error: String) -> void:
 		$auth_result.text = error
 		)
-	instance.authentication_result.connect(func(status: bool) -> void:
+	gameCenter.authentication_result.connect(func(status: bool) -> void:
 		if status:
 			$auth_state.text = "Authenticated"
 			gameCenter.local_player.load_photo(true, func(data: PackedByteArray) -> void: 
@@ -30,4 +28,4 @@ func _on_button_pressed() -> void:
 		else:
 			$auth_state.text = "Not Authenticated"
 		)
-	instance.authenticate()
+	gameCenter.authenticate()

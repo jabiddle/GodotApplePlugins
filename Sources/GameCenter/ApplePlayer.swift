@@ -25,6 +25,7 @@ class ApplePlayer: RefCounted, @unchecked Sendable {
             fatalError("Could not create object")
         }
         super.init(ctxt)
+
     }
 
     required init(_ context: InitContext) {
@@ -56,10 +57,6 @@ class ApplePlayer: RefCounted, @unchecked Sendable {
             }
         }
     }
-
-//    @Callable static func demo(name: String, age: Int) {
-//        GD.print("called ApplePlayer.demo for player=[\(name)] aged \(age)")
-//    }
 }
 
 @Godot
@@ -68,7 +65,7 @@ class AppleLocalPlayer: ApplePlayer, @unchecked Sendable {
         super.init(context)
         player = GKLocalPlayer.local
     }
-    
+
     init() {
         super.init(player: GKLocalPlayer.local)
     }

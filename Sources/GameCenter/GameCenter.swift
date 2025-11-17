@@ -51,69 +51,6 @@ class GameCenterManager: RefCounted, @unchecked Sendable {
             }
         }
     }
-
-    @Callable
-    func load_leaderboards(_ ids: [String], callback: Callable) {
-        GKLeaderboard.loadLeaderboards(IDs: ids.count == 0 ? nil : ids) { result, error in
-            let wrapped = VariantArray()
-            if let result {
-                for l in result {
-                    let wrap = AppleLeaderboard(board: l)
-                    wrapped.append(Variant(wrap))
-                }
-            }
-            _ = callback.call(Variant(wrapped))
-        }
-    }
-
-    /// The callback is invoked with nil on success, or a string with a description of the error
-    @Callable()
-    func report_achivement(achivements: VariantArray, callback: Callable) {
-        var array: [GKAchievement] = []
-        for va in achivements {
-            guard let va else { continue }
-            if let a = va.asObject(AppleAchievement.self) {
-                array.append(a.achievement)
-            }
-        }
-        GKAchievement.report(array) { error in
-            if let error {
-                _ = callback.call(Variant(error.localizedDescription))
-            } else {
-                _ = callback.call(nil)
-            }
-        }
-    }
-
-    /// The callback is invoked with nil on success, or a string with a description of the error
-    @Callable
-    func reset_achivements(callback: Callable) {
-        GKAchievement.resetAchievements { error in
-            if let error {
-                _ = callback.call(Variant(error.localizedDescription))
-            } else {
-                _ = callback.call(nil)
-            }
-        }
-    }
-
-    @Callable
-    func load_achievement_descriptions(callback: Callable) {
-        GKAchievementDescription.loadAchievementDescriptions { achievementDescriptions, error in
-            if let error {
-                _ = callback.call(Variant(error.localizedDescription))
-            } else if let achievementDescriptions {
-                let res = VariantArray()
-                for ad in achievementDescriptions {
-                    let ad = AppleAchievementDescription(ad)
-                    res.append(Variant(ad))
-                }
-                _ = callback.call(Variant(res))
-            } else {
-                _ = callback.call(Variant(VariantArray()))
-            }
-        }
-    }
 }
 
 #initSwiftExtension(cdecl: "godot_game_center_init", types: [
