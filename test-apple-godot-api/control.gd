@@ -46,7 +46,6 @@ func _on_button_requestmatch_pressed() -> void:
 				print("Could nto request a match %s" % error)
 			else:
 				print("Got a match!")
-	
 				gameMatch.data_received.connect(func (data: PackedByteArray, fromPlayer: GKPlayer)->void:
 					print("received data from Player")
 				)
@@ -63,8 +62,6 @@ func _on_button_requestmatch_pressed() -> void:
 				gameMatch.player_changed.connect(func(player: GKPlayer, connected: bool)->void: 
 					print("Status of player changed to %s" % connected)
 				)
-				# 0 is reliable
-				# 1 is unreliable
-				gameMatch.send_data_to_all_players(PackedByteArray(), 0)
+				gameMatch.send_data_to_all_players(PackedByteArray(), GKMatch.SendDataMode.reliable)
 		)
 		print("Not authenticated, authenticate first")

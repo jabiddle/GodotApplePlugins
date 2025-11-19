@@ -284,4 +284,5 @@ gameMatch.disconnect()
 
 ```gdscript
 func sendMessage(data: PackedByteArray):
-    gameMatch.send_data_to_all_players(data, )
+    gameMatch.send_data_to_all_players(data, GKMatch.SendDataMode.reliable)
+```

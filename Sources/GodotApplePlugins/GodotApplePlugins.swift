@@ -7,16 +7,22 @@
 
 import SwiftGodotRuntime
 
-#initSwiftExtension(cdecl: "godot_apple_plugins_start", types: [
-    AVAudioSession.self,
-    GameCenterManager.self,
-    GKAchievement.self,
-    GKAchievementDescription.self,
-    GKLocalPlayer.self,
-    GKLeaderboard.self,
-    GKLeaderboardSet.self,
-    GKMatch.self,
-    GKMatchmakerViewController.self,
-    GKMatchRequest.self,
-    GKPlayer.self,
-])
+#initSwiftExtension(
+    cdecl: "godot_apple_plugins_start",
+    types: [
+        AVAudioSession.self,
+        GameCenterManager.self,
+        GKAchievement.self,
+        GKAchievementDescription.self,
+        GKLocalPlayer.self,
+        GKLeaderboard.self,
+        GKLeaderboardSet.self,
+        GKMatch.self,
+        GKMatchmakerViewController.self,
+        GKMatchRequest.self,
+        GKPlayer.self,
+    ],
+    enums: [
+        GKMatch.SendDataMode.self,
+        AVAudioSession.SessionCategory.self
+    ])
