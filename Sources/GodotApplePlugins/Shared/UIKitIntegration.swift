@@ -6,6 +6,7 @@
 //
 #if canImport(UIKit)
 import UIKit
+import SwiftGodotRuntime
 
 extension UIApplication {
     var activeWindowScene: UIWindowScene? {
@@ -47,7 +48,7 @@ extension UIViewController {
 
 extension UIImage {
     func asGodotImage() -> Variant? {
-        guard let png = img.pngData() else { return nil }
+        guard let png = self.pngData() else { return nil }
         let array = PackedByteArray([UInt8](png))
         if let image = ClassDB.instantiate(class: "Image") {
             switch image.call(method: "load_png_from_buffer", Variant(array)) {

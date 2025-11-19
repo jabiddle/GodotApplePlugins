@@ -232,4 +232,56 @@ GKAchievement.reset_achivements(func(error: Variant)->void:
 )
 ```
 
+# Realtime Matchmaking
 
+* [GKMatch](https://developer.apple.com/documentation/gamekit/gkmatch)
+* [GKMatchRequest](https://developer.apple.com/documentation/gamekit/gkmatchrequest)
+
+
+## Events
+
+You can use the convenience request_match method after configuring your request,
+and on your callback setup the gameMatch to track the various states of the match,
+like this:
+
+```gdscript
+var req = GKMatchRequest.new()
+req.max_players = 2
+req.min_players = 1
+req.invite_message = "Join me in a quest to fun"
+GKMatchmakerViewController.request_match(req, func(gameMatch: GKMatch, error: Variant)->void:
+    if error:
+        print("Could nto request a match %s" % error)
+    else:
+        print("Got a match!")
+
+        gameMatch.data_received.connect(func (data: PackedByteArray, fromPlayer: GKPlayer)->void:
+            print("received data from Player")
+        )
+        gameMatch.data_received_for_recipient_from_player.connect(func(data: PackedByteArray, forRecipient: GKPlayer, fromRemotePlayer: GKPlayer)->void: 
+            print("Received data from a player to another player")
+        )
+        gameMatch.did_fail_with_error.connect(func(error: String)->void:
+            print("match failed with %s" % error)
+        )
+        gameMatch.should_reinvite_disconnected_player = (func(player: GKPlayer)->bool:
+            # We always reinvite
+            return true
+        )
+        gameMatch.player_changed.connect(func(player: GKPlayer, connected: bool)->void: 
+            print("Status of player changed to %s" % connected)
+        )
+)
+```
+
+### Disconnect
+
+```gdscript
+gameMatch.disconnect()
+```
+
+### Send to all
+
+```gdscript
+func sendMessage(data: PackedByteArray):
+    gameMatch.send_data_to_all_players(data, )

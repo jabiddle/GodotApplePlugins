@@ -30,17 +30,41 @@ func _on_button_pressed() -> void:
 				else:
 					print(error)
 				)
-			local.load_friends(func(friends: Array[GKPlayer], error: Variant) -> void:
-				if error == null:
-					for friend in friends:
-						print("Found friend: %s" % friend.display_name)
-				else:
-					print("Error loading friends: %s" % error)
-			)
-			GKAchievement.reset_achivements(func(error: Variant)->void:
-				print("Reset status: %s" % error)
-				)
 		else:
 			$auth_state.text = "Not Authenticated"
 		)
 	gameCenter.authenticate()
+
+func _on_button_requestmatch_pressed() -> void:	
+	if true:
+		var req = GKMatchRequest.new()
+		req.max_players = 2
+		req.min_players = 1
+		req.invite_message = "Join me in a quest to fun"
+		GKMatchmakerViewController.request_match(req, func(gameMatch: GKMatch, error: Variant)->void:
+			if error:
+				print("Could nto request a match %s" % error)
+			else:
+				print("Got a match!")
+	
+				gameMatch.data_received.connect(func (data: PackedByteArray, fromPlayer: GKPlayer)->void:
+					print("received data from Player")
+				)
+				gameMatch.data_received_for_recipient_from_player.connect(func(data: PackedByteArray, forRecipient: GKPlayer, fromRemotePlayer: GKPlayer)->void: 
+					print("Received data from a player to another player")
+				)
+				gameMatch.did_fail_with_error.connect(func(error: String)->void:
+					print("match failed with %s" % error)
+				)
+				gameMatch.should_reinvite_disconnected_player = (func(player: GKPlayer)->bool:
+					# We always reinvite
+					return true
+				)
+				gameMatch.player_changed.connect(func(player: GKPlayer, connected: bool)->void: 
+					print("Status of player changed to %s" % connected)
+				)
+				# 0 is reliable
+				# 1 is unreliable
+				gameMatch.send_data_to_all_players(PackedByteArray(), 0)
+		)
+		print("Not authenticated, authenticate first")

@@ -16,8 +16,20 @@ func presentOnTop(_ vc: NSViewController) {
         NSApp.activate(ignoringOtherApps: true)
         return
     }
+    if let cv = window.contentViewController {
+        cv.presentAsSheet(vc)
+    } else {
+        let panel = NSWindow(
+            contentViewController: vc
+        )
 
-    window.contentViewController?.presentAsSheet(vc)
+        panel.styleMask = [.titled, .resizable, .closable]
+        panel.level = .floating
+        panel.isReleasedWhenClosed = false
+        panel.isReleasedWhenClosed = true
+
+        panel.makeKeyAndOrderFront(nil)
+    }
 }
 
 extension NSImage {

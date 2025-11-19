@@ -17,9 +17,10 @@ import GameKit
 class GKMatchmakerViewController: RefCounted, @unchecked Sendable {
     class Proxy: NSObject, GameKit.GKMatchmakerViewControllerDelegate, GKLocalPlayerListener {
         func matchmakerViewControllerWasCancelled(_ viewController: GameKit.GKMatchmakerViewController) {
+            GD.print("Canceled")
             base?.cancelled.emit("")
         }
-        
+
         func matchmakerViewController(_ viewController: GameKit.GKMatchmakerViewController, didFailWithError error: any Error) {
             GD.print("GKMVC: didFailWithError")
             base?.failed_with_error.emit(String(describing: error))
@@ -40,8 +41,6 @@ class GKMatchmakerViewController: RefCounted, @unchecked Sendable {
             base?.did_find_hosted_players.emit(result)
         }
 
-
-
         weak var base: GKMatchmakerViewController?
         init(_ base: GKMatchmakerViewController) {
             self.base = base
@@ -49,7 +48,6 @@ class GKMatchmakerViewController: RefCounted, @unchecked Sendable {
     }
 
     @Signal var cancelled: SignalWithArguments<String>
-
 
     /// Matchmaking has failed with an error
     @Signal var failed_with_error: SignalWithArguments<String>
@@ -64,8 +62,8 @@ class GKMatchmakerViewController: RefCounted, @unchecked Sendable {
     var proxy: Proxy?
 
     /// Returns a view controller for the specified request, configure the various callbacks, and then
-    /// call present
-    @Callable static func request(request: GKMatchRequest) -> GKMatchmakerViewController? {
+    /// call `present` on it.
+    @Callable static func create_controller(request: GKMatchRequest) -> GKMatchmakerViewController? {
         MainActor.assumeIsolated {
             if let vc = GameKit.GKMatchmakerViewController(matchRequest: request.request) {
                 let v = GKMatchmakerViewController()
@@ -81,12 +79,69 @@ class GKMatchmakerViewController: RefCounted, @unchecked Sendable {
         }
     }
 
+    class RequestMatchDelegate: NSObject, GameKit.GKMatchmakerViewControllerDelegate {
+        private let callback: Callable
+        let done: () -> ()
+        init(_ callback: Callable, done: @escaping () -> () = { }) {
+            self.callback = callback
+            self.done = done
+        }
+
+        func matchmakerViewController(
+            _ viewController: GameKit.GKMatchmakerViewController,
+            didFind match: GameKit.GKMatch
+        ) {
+            _ = self.callback.call(Variant(GKMatch(match: match)), nil)
+        }
+
+        func matchmakerViewControllerWasCancelled(
+            _ source: GameKit.GKMatchmakerViewController
+        ) {
+            _ = self.callback.call(nil, Variant("cancelled"))
+        }
+
+        func matchmakerViewController(
+            _ source: GameKit.GKMatchmakerViewController,
+            didFailWithError: (any Error)
+        ) {
+            _ = self.callback.call(nil, Variant(didFailWithError.localizedDescription))
+        }
+    }
+
+    /// Convenience method that is a version that sets up `create_controller` and calls the callback
+    /// with two arguments, the first is the match on success, and the second is an error on failure, which can be
+    /// one of the following strings: "cancelled",
+    @Callable static func request_match(request: GKMatchRequest, callback: Callable) {
+        MainActor.assumeIsolated {
+            if let vc = GameKit.GKMatchmakerViewController(matchRequest: request.request) {
+                var hold: RequestMatchDelegate?
+
+                hold = RequestMatchDelegate(callback, done: {
+                    hold = nil
+                })
+                vc.matchmakerDelegate = hold
+                GKMatchmakerViewController.present(vc)
+            }
+        }
+    }
+
     @Callable func present() {
         guard let vc else {
             return
         }
         MainActor.assumeIsolated {
-            presentOnTop(vc)
+            GKMatchmakerViewController.present(vc)
         }
+    }
+
+    @MainActor
+    static func present(_ vc: GameKit.GKMatchmakerViewController) {
+#if os(iOS)
+        presentOnTop(vc)
+#else
+        let dialogController = GKDialogController.shared()
+        dialogController.parentWindow = NSApplication.shared.mainWindow
+        dialogController.present(vc)
+#endif
     }
 }
