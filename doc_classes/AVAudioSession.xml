@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="AVAudioSession" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="category" type="int" setter="set_category" getter="get_category" default="6">
+		</member>
+	</members>
+	<constants>
+		<constant name="ambient" value="0" enum="SessionCategory">
+		</constant>
+		<constant name="multiRoute" value="1" enum="SessionCategory">
+		</constant>
+		<constant name="playAndRecord" value="2" enum="SessionCategory">
+		</constant>
+		<constant name="playback" value="3" enum="SessionCategory">
+		</constant>
+		<constant name="record" value="4" enum="SessionCategory">
+		</constant>
+		<constant name="soloAmbient" value="5" enum="SessionCategory">
+		</constant>
+		<constant name="unknown" value="6" enum="SessionCategory">
+		</constant>
+	</constants>
+</class>

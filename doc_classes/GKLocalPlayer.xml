@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GKLocalPlayer" inherits="GKPlayer" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="fetch_items_for_identity_verification_signature">
+			<return type="void" />
+			<param index="0" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="load_challengeable_friends">
+			<return type="void" />
+			<param index="0" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="load_friends">
+			<return type="void" />
+			<param index="0" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="load_recent_friends">
+			<return type="void" />
+			<param index="0" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="is_authenticated" type="bool" setter="" getter="get_is_authenticated" default="false">
+		</member>
+		<member name="is_multiplayer_gaming_restricted" type="bool" setter="" getter="get_is_multiplayer_gaming_restricted" default="true">
+		</member>
+		<member name="is_personalized_communication_restricted" type="bool" setter="" getter="get_is_personalized_communication_restricted" default="true">
+		</member>
+		<member name="is_underage" type="bool" setter="" getter="get_is_underage" default="false">
+		</member>
+	</members>
+</class>

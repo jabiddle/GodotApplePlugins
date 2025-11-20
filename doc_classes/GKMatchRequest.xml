@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GKMatchRequest" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="max_players_allowed_for_match" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="forType" type="MatchType" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="default_number_of_players" type="int" setter="set_default_number_of_players" getter="get_default_number_of_players" default="0">
+		</member>
+		<member name="invite_message" type="String" setter="set_invite_message" getter="get_invite_message" default="&quot;&quot;">
+		</member>
+		<member name="max_players" type="int" setter="set_max_players" getter="get_max_players" default="2">
+		</member>
+		<member name="min_players" type="int" setter="set_min_players" getter="get_min_players" default="2">
+		</member>
+	</members>
+</class>

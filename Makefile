@@ -35,11 +35,14 @@ package: build
 		$(XCODEBUILD) -create-xcframework \
 			-framework $(DERIVED_DATA)/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework \
 			-output $(CURDIR)/addons/$$framework/bin/$${framework}.xcframework; \
-		cp $(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/$$framework $(CURDIR)/addons/$$framework/bin/lib$${framework}-x64.dylib; \
-		cp $(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/$$framework $(CURDIR)/addons/$$framework/bin/lib$${framework}-arm64.dylib; \
+		cp -pr $(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework $(CURDIR)/addons/$$framework/bin/$${framework}.framework \
+		cp -pr $(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework $(CURDIR)/addons/$$framework/bin/$${framework}_x64.framework; \
 	done
 
 XCFRAMEWORK_GODOTAPPLEPLUGINS ?= $(CURDIR)/addons/GodotApplePlugins/bin/GodotApplePlugins.xcframework
+
+gendocs:
+	(cd test-apple-godot-api; ~/cvs/master-godot/editor/bin/godot.macos.editor.dev.arm64 --headless --path . --doctool .. --gdextension-docs)
 
 #
 # Quick hacks I use for rapid iteration
@@ -51,10 +54,11 @@ XCFRAMEWORK_GODOTAPPLEPLUGINS ?= $(CURDIR)/addons/GodotApplePlugins/bin/GodotApp
 # API.
 o:
 	rm -rf '$(XCFRAMEWORK_GODOTAPPLEPLUGINS)'; \
+	rm -rf addons/GodotApplePlugins/bin/GodotApplePlugins.framework; \
 	$(XCODEBUILD) -create-xcframework \
 		-framework ~/DerivedData/GodotApplePlugins-*/Build/Products/Debug-iphoneos/PackageFrameworks/GodotApplePlugins.framework/ \
-		-framework ~/DerivedData/GodotApplePlugins-*/Build/Products/Debug/PackageFrameworks/GodotApplePlugins.framework/ \
 		-output '$(XCFRAMEWORK_GODOTAPPLEPLUGINS)'
+	cp -pr ~/DerivedData/GodotApplePlugins-*/Build/Products/Debug/PackageFrameworks/GodotApplePlugins.framework addons/GodotApplePlugins/bin/GodotApplePlugins.framework
 
 #
 # This I am using to test on the "Exported" project I placed

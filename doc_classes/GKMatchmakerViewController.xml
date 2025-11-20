@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GKMatchmakerViewController" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="create_controller" qualifiers="static">
+			<return type="GKMatchmakerViewController" />
+			<param index="0" name="request" type="GKMatchRequest" />
+			<description>
+			</description>
+		</method>
+		<method name="present">
+			<return type="void" />
+			<description>
+			</description>
+		</method>
+		<method name="request_match" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="request" type="GKMatchRequest" />
+			<param index="1" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<signals>
+		<signal name="cancelled">
+			<param index="0" name="arg1" type="String" />
+			<description>
+			</description>
+		</signal>
+		<signal name="did_find_hosted_players">
+			<param index="0" name="arg1" type="Array" />
+			<description>
+			</description>
+		</signal>
+		<signal name="did_find_match">
+			<param index="0" name="arg1" type="GKMatch" />
+			<description>
+			</description>
+		</signal>
+		<signal name="failed_with_error">
+			<param index="0" name="arg1" type="String" />
+			<description>
+			</description>
+		</signal>
+	</signals>
+</class>

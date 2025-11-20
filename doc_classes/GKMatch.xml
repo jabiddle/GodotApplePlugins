@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GKMatch" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="disconnect">
+			<return type="void" />
+			<description>
+			</description>
+		</method>
+		<method name="send">
+			<return type="int" />
+			<param index="0" name="data" type="PackedByteArray" />
+			<param index="1" name="toPlayers" type="Array" />
+			<param index="2" name="dataMode" type="SendDataMode" />
+			<description>
+			</description>
+		</method>
+		<method name="send_data_to_all_players">
+			<return type="int" />
+			<param index="0" name="data" type="PackedByteArray" />
+			<param index="1" name="dataMode" type="SendDataMode" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="expected_player_count" type="int" setter="" getter="get_expected_player_count" default="0">
+		</member>
+		<member name="players" type="Array" setter="" getter="get_players" default="[]">
+		</member>
+		<member name="should_reinvite_disconnected_player" type="Variant" setter="set_should_reinvite_disconnected_player" getter="get_should_reinvite_disconnected_player">
+		</member>
+	</members>
+	<signals>
+		<signal name="data_received">
+			<param index="0" name="arg1" type="PackedByteArray" />
+			<param index="1" name="arg2" type="GKPlayer" />
+			<description>
+			</description>
+		</signal>
+		<signal name="data_received_for_recipient_from_player">
+			<param index="0" name="arg1" type="PackedByteArray" />
+			<param index="1" name="arg2" type="GKPlayer" />
+			<param index="2" name="arg3" type="GKPlayer" />
+			<description>
+			</description>
+		</signal>
+		<signal name="did_fail_with_error">
+			<param index="0" name="arg1" type="String" />
+			<description>
+			</description>
+		</signal>
+		<signal name="player_changed">
+			<param index="0" name="arg1" type="GKPlayer" />
+			<param index="1" name="arg2" type="bool" />
+			<description>
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="reliable" value="0" enum="SendDataMode">
+		</constant>
+		<constant name="unreliable" value="1" enum="SendDataMode">
+		</constant>
+	</constants>
+</class>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GKAchievement" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="load_achievements" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="report_achivement" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="achivements" type="Array" />
+			<param index="1" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="reset_achivements" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="identifier" type="String" setter="set_identifier" getter="get_identifier" default="&quot;*uninitialized achievement identifier*&quot;">
+		</member>
+		<member name="is_completed" type="bool" setter="" getter="get_is_completed" default="false">
+		</member>
+		<member name="percent_complete" type="float" setter="set_percent_complete" getter="get_percent_complete" default="0.0">
+		</member>
+		<member name="player" type="GKPlayer" setter="" getter="get_player">
+		</member>
+		<member name="shows_completion_banner" type="bool" setter="set_shows_completion_banner" getter="get_shows_completion_banner" default="true">
+		</member>
+	</members>
+</class>

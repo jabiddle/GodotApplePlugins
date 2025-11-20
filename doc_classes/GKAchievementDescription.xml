@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GKAchievementDescription" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="load_achievement_descriptions" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="load_image">
+			<return type="void" />
+			<param index="0" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="achieved_description" type="String" setter="" getter="get_achieved_description" default="&quot;&quot;">
+		</member>
+		<member name="group_identifier" type="String" setter="" getter="get_group_identifier" default="&quot;&quot;">
+		</member>
+		<member name="identifier" type="String" setter="" getter="get_identifier" default="&quot;&quot;">
+		</member>
+		<member name="is_hidden" type="bool" setter="" getter="get_is_hidden" default="false">
+		</member>
+		<member name="is_replayable" type="bool" setter="" getter="get_is_replayable" default="false">
+		</member>
+		<member name="maximum_points" type="int" setter="" getter="get_maximum_points" default="0">
+		</member>
+		<member name="rarity_percent" type="Variant" setter="" getter="get_rarity_percent">
+		</member>
+		<member name="title" type="String" setter="" getter="get_title" default="&quot;&quot;">
+		</member>
+		<member name="unachieved_description" type="String" setter="" getter="get_unachieved_description" default="&quot;&quot;">
+		</member>
+	</members>
+</class>

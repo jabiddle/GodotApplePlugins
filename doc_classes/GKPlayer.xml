@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GKPlayer" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="load_photo">
+			<return type="void" />
+			<param index="0" name="small" type="bool" />
+			<param index="1" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="scopedIDsArePersistent">
+			<return type="bool" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="alias" type="String" setter="" getter="get_alias" default="&quot;Unknown&quot;">
+		</member>
+		<member name="display_name" type="String" setter="" getter="get_display_name" default="&quot;&quot;">
+		</member>
+		<member name="game_player_id" type="String" setter="" getter="get_game_player_id" default="&quot;2437A06C5BAB4D0FD76710768A7790EA0E97ED560BA2B0D31A6F9C398EA52453&quot;">
+		</member>
+		<member name="is_invitable" type="bool" setter="" getter="get_is_invitable" default="false">
+		</member>
+		<member name="team_player_id" type="String" setter="" getter="get_team_player_id" default="&quot;1CCC5A34E9526C320680E55D2E5E37848DC3A4A84E7A2D19C0D3B147F67234C3&quot;">
+		</member>
+	</members>
+</class>

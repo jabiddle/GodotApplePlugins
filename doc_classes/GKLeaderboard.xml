@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GKLeaderboard" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="load_entries">
+			<return type="void" />
+			<param index="0" name="players" type="Array" />
+			<param index="1" name="timeScope" type="TimeScope" />
+			<param index="2" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="load_image">
+			<return type="void" />
+			<param index="0" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="load_leaderboards" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="ids" type="PackedStringArray" />
+			<param index="1" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+		<method name="submit_score">
+			<return type="void" />
+			<param index="0" name="score" type="int" />
+			<param index="1" name="context" type="int" />
+			<param index="2" name="player" type="GKPlayer" />
+			<param index="3" name="callback" type="Callable" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="activity_identifier" type="String" setter="" getter="get_activity_identifier" default="&quot;&quot;">
+		</member>
+		<member name="activity_properties" type="Dictionary" setter="" getter="get_activity_properties" default="{}">
+		</member>
+		<member name="duration" type="float" setter="" getter="get_duration" default="0.0">
+		</member>
+		<member name="group_identifier" type="String" setter="" getter="get_group_identifier" default="&quot;&quot;">
+		</member>
+		<member name="title" type="String" setter="" getter="get_title" default="&quot;&quot;">
+		</member>
+		<member name="type" type="int" setter="" getter="get_type" default="0">
+		</member>
+	</members>
+	<constants>
+		<constant name="today" value="0" enum="TimeScope">
+		</constant>
+		<constant name="week" value="1" enum="TimeScope">
+		</constant>
+		<constant name="allTime" value="2" enum="TimeScope">
+		</constant>
+	</constants>
+</class>

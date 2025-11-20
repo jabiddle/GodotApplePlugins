@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="GameCenterManager" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="authenticate">
+			<return type="void" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="local_player" type="GKLocalPlayer" setter="set_local_player" getter="get_local_player">
+		</member>
+	</members>
+	<signals>
+		<signal name="authentication_error">
+			<param index="0" name="arg1" type="String" />
+			<description>
+			</description>
+		</signal>
+		<signal name="authentication_result">
+			<param index="0" name="arg1" type="bool" />
+			<description>
+			</description>
+		</signal>
+	</signals>
+</class>

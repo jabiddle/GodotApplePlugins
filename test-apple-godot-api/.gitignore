@@ -1,3 +1,11 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+*log
+*ipa
+*pck
+*xcarchive
+*xcodeproj
+TestAppleGodotApi
+ExportOptions.plist
+DistributionSummary.plist
