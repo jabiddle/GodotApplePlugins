@@ -17,6 +17,7 @@ import SwiftGodotRuntime
         GKGameCenterViewController.self,
         GKLocalPlayer.self,
         GKLeaderboard.self,
+        GKLeaderboardEntry.self,
         GKLeaderboardSet.self,
         GKMatch.self,
         GKMatchmakerViewController.self,
