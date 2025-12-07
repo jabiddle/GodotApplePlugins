@@ -11,7 +11,7 @@ import StoreKit
 @Godot
 public class StoreKitManager: RefCounted, @unchecked Sendable {
     // [StoreProduct], StoreKitStatus
-    @Signal var products_request_completed: SignalWithArguments<VariantArray, Int>
+    @Signal var products_request_completed: SignalWithArguments<TypedArray<StoreProduct?>, Int>
     // StoreTransaction, StoreKitStatus, error message
     @Signal var purchase_completed: SignalWithArguments<StoreTransaction?, Int, String>
     // StoreTransaction
@@ -85,9 +85,9 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
                 }
                 let products = try await Product.products(for: ids)
                 let storeProducts = products.map { StoreProduct($0) }
-                let variantArray = VariantArray()
+                let variantArray = TypedArray<StoreProduct?>()
                 for sp in storeProducts {
-                    variantArray.append(Variant(sp))
+                    variantArray.append(sp)
                 }
                 
                 await MainActor.run {
@@ -95,7 +95,7 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
                 }
             } catch {
                 await MainActor.run {
-                    _ = self.products_request_completed.emit(VariantArray(), StoreKitStatus.cancelled.rawValue)
+                    _ = self.products_request_completed.emit(TypedArray<StoreProduct?>(), StoreKitStatus.cancelled.rawValue)
                 }
             }
         }
