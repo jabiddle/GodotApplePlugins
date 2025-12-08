@@ -32,18 +32,30 @@
 	</methods>
 	<signals>
 		<signal name="products_request_completed">
-			<param index="0" name="arg1" type="Array[StoreProduct]" />
-			<param index="1" name="arg2" type="int" />
+			<param index="0" name="products" type="Array" />
+			<param index="1" name="status" type="int" enum="StoreKitManager.StoreKitStatus" />
 			<description>
-				Emitted when a product request finishes. `arg1` is an Array of [StoreProduct]s. `arg2` is a [enum StoreKitStatus] indicating success or failure.
+				Emitted when a product request completes.
+				[param products] is an Array of [StoreProduct]s (or nulls).
+				[param status] indicates success or failure.
 			</description>
 		</signal>
 		<signal name="purchase_completed">
-			<param index="0" name="arg1" type="StoreTransaction" />
-			<param index="1" name="arg2" type="int" />
-			<param index="2" name="arg3" type="String" />
+			<param index="0" name="transaction" type="StoreTransaction" />
+			<param index="1" name="status" type="int" enum="StoreKitManager.StoreKitStatus" />
+			<param index="2" name="error_message" type="String" />
 			<description>
-				Emitted when a purchase completes. `arg1` is the [StoreTransaction] (can be null on failure), `arg2` is the [enum StoreKitStatus], and `arg3` is an error message if applicable.
+				Emitted when a purchase completes.
+				[param transaction] is the [StoreTransaction] on success.
+				[param status] indicates the result (OK, cancelled, invalid product, etc.).
+				[param error_message] contains error details if failed.
+			</description>
+		</signal>
+		<signal name="purchase_intent">
+			<param index="0" name="product" type="StoreProduct" />
+			<description>
+				Emitted when the App Store detects a purchase intent (e.g., from a promotional link).
+				The app should initiate the purchase flow for the [param product].
 			</description>
 		</signal>
 		<signal name="restore_completed">

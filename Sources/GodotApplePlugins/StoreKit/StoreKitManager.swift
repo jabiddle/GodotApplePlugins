@@ -16,6 +16,9 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
     @Signal var purchase_completed: SignalWithArguments<StoreTransaction?, Int, String>
     // StoreTransaction
     @Signal var transaction_updated: SignalWithArguments<StoreTransaction?>
+    // StoreProduct
+    @Signal var purchase_intent: SignalWithArguments<StoreProduct?>
+
     // StoreKitStatus, error_message (empty on success)
     @Signal var restore_completed: SignalWithArguments<Int, String>
 
@@ -35,14 +38,21 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
         case unknownStatus
     }
     private var updatesTask: Task<Void, Never>?
+    private var intentsTask: Task<Void, Never>?
 
     required init(_ context: InitContext) {
         super.init(context)
-        startTransactionListener()
+
+        // Give a chance for the user code to set up signals before we start emitting events
+        DispatchQueue.main.async {
+            self.startTransactionListener()
+            self.startPurchaseIntentListener()
+        }
     }
     
     deinit {
         updatesTask?.cancel()
+        intentsTask?.cancel()
     }
 
     private func startTransactionListener() {
@@ -52,6 +62,19 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
             }
         }
     }
+
+    private func startPurchaseIntentListener() {
+        if #available(iOS 17.4, macOS 14.4, *) {
+            intentsTask = Task {
+                 for await intent in PurchaseIntent.intents {
+                     let storeProduct = StoreProduct(intent.product)
+                     await MainActor.run {
+                         _ = self.purchase_intent.emit(storeProduct)
+                     }
+                 }
+             }
+        }
+     }
     
     private func handleTransaction(_ verificationResult: VerificationResult<Transaction>) {
         switch verificationResult {
