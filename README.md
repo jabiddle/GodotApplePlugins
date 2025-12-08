@@ -1,13 +1,15 @@
 Plugins for some Apple-specific tasks, works on MacOS and iOS.
 
-You can get a ready-to-use binary from the "releases" tab, just drag the contents  into your addons directory.   You can start testing right away 
-on a Mac project, and for iOS, export your iOS project and run.
+
+You can get a ready-to-use binary from the "releases" tab, just drag the contents  into 
+your addons directory.   You can start testing right away  on a Mac project, and for iOS, 
+export your iOS project and run.
 
 This add-on currently includes support for:
 
 * GameCenter [GameCenter Integration Guide](Sources/GodotApplePlugins/GameCenter/GameCenterGuide.md)
 * StoreKit2
-* AuthenticationServices ("sign-in with Apple")
+* AuthenticationServices ("sign-in with Apple").
 
 The release contains both binaries for MacOS as dynamic libraries and
 an iOS xcframework compiled with the "Mergeable Library" feature.
@@ -16,7 +18,11 @@ library (about 10 megs at the time of this writing) that does not need
 to be copied on every build speeding your development, but you can
 switch to "Release Mode" and set "Create Merged Binary" to "Manual"
 and you will further reduce the size of your executable (about 1.7
-megs at the time of this writing.)
+megs at the time of this writing).
+
+The "AuthenticationServices" code was derived from [Dragos Daian's/
+Nirmal Ac's](https://github.com/appsinacup/godot-apple-login) binding and 
+Xogot's own use.
 
 # API Design
 
@@ -41,10 +47,10 @@ xattr -dr com.apple.quarantine addons/GodotApplePlugins/bin/*framework
 
 ## AuthenticationServices
 
-Make sure that your iOS or Mac app have the `com.apple.developer.applesignin` entitlment.   When I am debugging this myself on macOS, I resign the official
-Godot download with this entitlement.
-
-When you do, you will need your own app identifier, and you need this identifier to have the 
+Make sure that your iOS or Mac app have the `com.apple.developer.applesignin` entitlment.   
+When I am debugging this myself on macOS, I resign the official
+Godot download with this entitlement (you must download a provisioning profile that
+contains the entitlement, or the APIs will fail).
 
 For very simple uses, you can use:
 
@@ -69,7 +75,36 @@ func _on_authorization_completed(credential):
         print("Password: ", credential.password)
 ```
 
-For more advance users, you will find that the API replicates Apple's API, and it surfaces the various features that you expect from it.
+For more advance users, you will find that the API replicates Apple's API, and 
+it surfaces the various features that you expect from it.
+
+### Configure
+
+For iOS, set at Project -> Export -> iOS -> `entitlements/additional`:
+
+```xml
+<key>com.apple.developer.applesignin</key>
+<array>
+    <string>Default</string>
+</array>
+```
+
+For macOS, set the same entitlements as above (eg. when running codesign):
+
+```sh
+codesign --force --options=runtime --verbose --timestamp \
+  --entitlements entitlements.plist --sign "<SIGN_ENTITY>" \
+  "MyApp.app/Contents/MacOS/MyApp"
+```
+
+where `entitlements.plist` contains again:
+
+```xml
+<key>com.apple.developer.applesignin</key>
+<array>
+    <string>Default</string>
+</array>
+```
 
 # Sizes
 
