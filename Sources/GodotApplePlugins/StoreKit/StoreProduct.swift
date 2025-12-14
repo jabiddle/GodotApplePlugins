@@ -33,3 +33,43 @@ class StoreProduct: RefCounted, @unchecked Sendable {
         return "\(product)"
     }
 }
+
+@Godot
+class StoreProductPurchaseOption: RefCounted, @unchecked Sendable {
+    var purchaseOption: Product.PurchaseOption?
+
+    convenience init(_ purchaseOption: Product.PurchaseOption) {
+        self.init()
+        self.purchaseOption = purchaseOption
+    }
+
+    @Callable
+    static func app_account_token(stringUuidToken: String) -> StoreProductPurchaseOption? {
+        guard let token = UUID(uuidString: stringUuidToken) else { return nil }
+        let purchaseOption = Product.PurchaseOption.appAccountToken(token)
+        return StoreProductPurchaseOption(purchaseOption)
+    }
+
+    @Callable
+    static func win_back_offer(offer: StoreProductSubscriptionOffer?) -> StoreProductPurchaseOption? {
+        guard let skoffer = offer?.offer else {
+            return nil
+        }
+        if #available(iOS 17.0, macOS 15.0, *) {
+            let purchaseOption = Product.PurchaseOption.winBackOffer(skoffer)
+            return StoreProductPurchaseOption(purchaseOption)
+        } else {
+            return nil
+        }
+    }
+
+    @Callable
+    static func quantity(value: Int) -> StoreProductPurchaseOption? {
+        return StoreProductPurchaseOption(Product.PurchaseOption.quantity(value))
+    }
+
+    @Callable
+    static func introductory_offer_elligibility(jws: String) -> StoreProductPurchaseOption? {
+        return StoreProductPurchaseOption(Product.PurchaseOption.introductoryOfferEligibility(compactJWS: jws))
+    }
+}

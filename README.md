@@ -35,17 +35,6 @@ In place of Apple delegate's pattern, I use Godot's callbacks - and I surfaced p
 
 Both GameCenter and AuthenticationServices APIs use class names that are 1:1 mappings to Apple's APIs as they use 2-letter namespaces (GK, AS) and they are not likely to conflicth with your code.   For the StoreKit API, I chose to change the names as these APIs use terms that are too general (Store, Product) and could clash with your own code.
 
-# After you download
-
-Notice that MacOS will not let you load these dynamic libraries until you remove the 
-quarantine attribute from them.
-
-So you need to run this on the binaries after you unpack them:
-
-```
-xattr -dr com.apple.quarantine addons/GodotApplePlugins/bin/*framework
-```
-
 # Notes on the APIs 
 
 ## AuthenticationServices

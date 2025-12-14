@@ -7,10 +7,10 @@
 		This class handles the core StoreKit functionality. It provides methods to fetch product information from the App Store, initiate purchases,
         restore previous purchases and be notified of the current status of the purchase upon startup.
 
-        Upon creation, this class will start immediately to raise the [code]transaction_updated[/code] signal
-        to notify you of the status of purchases as well as the [code]purchase_intent[/code] signal
-        letting you know any purchase intents.   You should register the signals immediately after
-        instantiating.
+        You should call [code]start[/code] in this class to start processing the transactions and
+        purchase intent notifications.   After that methos is called, the object will raise
+        the [code]transaction_updated[/code] signal to notify you of the status of purchases
+        as well as the [code]purchase_intent[/code] signal letting you know any purchase intents.
 	</description>
 	<tutorials>
 	</tutorials>
