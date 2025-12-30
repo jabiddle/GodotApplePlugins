@@ -23,6 +23,9 @@ class GameCenterManager: RefCounted, @unchecked Sendable {
     var isAuthenticated: Bool = false
     
     @Export var localPlayer: GKLocalPlayer
+    @Export var accessPoint: GKAccessPoint {
+        get { GKAccessPoint() }
+    }
 
     required init(_ context: InitContext) {
         localPlayer = GKLocalPlayer()
@@ -49,17 +52,18 @@ class GameCenterManager: RefCounted, @unchecked Sendable {
     }
 }
 
-#if standalone
-#initSwiftExtension(cdecl: "godot_game_center_init", types: [
-    GameCenterManager.self,
-    GKAchievement.self,
-    GKAchievementDescription.self,
-    GKLocalPlayer.self,
-    GKLeaderboard.self,
-    GKLeaderboardSet.self,
-    GKMatch.self,
-    GKMatchmakerViewController.self,
-    GKMatchRequest.self,
-    GKPlayer.self,
-])
-#endif
+//#if standalone
+//#initSwiftExtension(cdecl: "godot_game_center_init", types: [
+//    GameCenterManager.self,
+//    GKAccessPoint.self,
+//    GKAchievement.self,
+//    GKAchievementDescription.self,
+//    GKLocalPlayer.self,
+//    GKLeaderboard.self,
+//    GKLeaderboardSet.self,
+//    GKMatch.self,
+//    GKMatchmakerViewController.self,
+//    GKMatchRequest.self,
+//    GKPlayer.self,
+//])
+//#endif

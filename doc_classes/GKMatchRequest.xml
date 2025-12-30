@@ -45,11 +45,11 @@
 		</member>
 	</members>
 	<constants>
-		<constant name="peerToPeer" value="0" enum="MatchType">
+		<constant name="PEER_TO_PEER" value="0" enum="MatchType">
 		</constant>
-		<constant name="hosted" value="1" enum="MatchType">
+		<constant name="HOSTED" value="1" enum="MatchType">
 		</constant>
-		<constant name="turnBased" value="2" enum="MatchType">
+		<constant name="TURN_BASED" value="2" enum="MatchType">
 		</constant>
 	</constants>
 </class>

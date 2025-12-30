@@ -16,6 +16,7 @@ import SwiftGodotRuntime
         AppleURL.self,
 
         GameCenterManager.self,
+        GKAccessPoint.self,
         GKAchievement.self,
         GKAchievementDescription.self,
         GKGameCenterViewController.self,

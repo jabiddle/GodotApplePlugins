@@ -18,23 +18,23 @@ class StoreProductSubscriptionOffer: RefCounted, @unchecked Sendable {
     }
 
     public enum OfferType: Int, CaseIterable {
-        case introductory
-        case promotional
-        case winBack
-        case unknown
+        case INTRODUCTORY
+        case PROMOTIONAL
+        case WIN_BACK
+        case UNKNOWN
     }
 
     @Export var offerId: String { offer?.id ?? ""}
     @Export var type: OfferType {
         guard let t = offer?.type else {
-            return .unknown
+            return .UNKNOWN
         }
-        if t == .introductory { return .introductory }
-        if t == .promotional { return .promotional }
+        if t == .introductory { return .INTRODUCTORY }
+        if t == .promotional { return .PROMOTIONAL }
         if #available(macOS 15.0, iOS 18.0, *) {
-            if t == .winBack { return .winBack }
+            if t == .winBack { return .WIN_BACK }
         }
-        return .unknown
+        return .UNKNOWN
     }
 
     @Export var typeLocalized: String {

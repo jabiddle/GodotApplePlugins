@@ -23,19 +23,19 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
     @Signal("status", "message") var restore_completed: SignalWithArguments<Int, String>
 
     public enum StoreKitStatus: Int, CaseIterable {
-        case ok
+        case OK
         /// Invalid product, the StoreProduct does not contains a valid product
-        case invalidProduct
+        case INVALID_PRODUCT
         /// The oepration was canceled
-        case cancelled
+        case CANCELLED
 
-        case unverifiedTransaction
+        case UNVERIFIED_TRANSACTION
 
-        case userCancelled
+        case USER_CANCELLED
 
-        case purchasePending
+        case PURCHASE_PENDING
 
-        case unknownStatus
+        case UNKNOWN_STATUS
     }
     private var updatesTask: Task<Void, Never>?
     private var intentsTask: Task<Void, Never>?
@@ -131,11 +131,11 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
                 }
                 
                 await MainActor.run {
-                    _ = self.products_request_completed.emit(variantArray, StoreKitStatus.ok.rawValue)
+                    _ = self.products_request_completed.emit(variantArray, StoreKitStatus.OK.rawValue)
                 }
             } catch {
                 await MainActor.run {
-                    _ = self.products_request_completed.emit(TypedArray<StoreProduct?>(), StoreKitStatus.cancelled.rawValue)
+                    _ = self.products_request_completed.emit(TypedArray<StoreProduct?>(), StoreKitStatus.CANCELLED.rawValue)
                 }
             }
         }
@@ -149,7 +149,7 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
     @Callable
     func purchase_with_options(product: StoreProduct, options: TypedArray<StoreProductPurchaseOption?>) {
         guard let skProduct = product.product else {
-            self.purchase_completed.emit(nil, StoreKitStatus.invalidProduct.rawValue, "Invalid Product")
+            self.purchase_completed.emit(nil, StoreKitStatus.INVALID_PRODUCT.rawValue, "Invalid Product")
             return
         }
 
@@ -169,29 +169,29 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
                         let storeTransaction = StoreTransaction(transaction)
                         await transaction.finish()
                         await MainActor.run {
-                            _ = self.purchase_completed.emit(storeTransaction, StoreKitStatus.ok.rawValue, "")
+                            _ = self.purchase_completed.emit(storeTransaction, StoreKitStatus.OK.rawValue, "")
                         }
                     case .unverified(_, let error):
                         await MainActor.run {
-                            _ = self.purchase_completed.emit(nil, StoreKitStatus.unverifiedTransaction.rawValue, "Unverified transaction: \(error.localizedDescription)")
+                            _ = self.purchase_completed.emit(nil, StoreKitStatus.UNVERIFIED_TRANSACTION.rawValue, "Unverified transaction: \(error.localizedDescription)")
                         }
                     }
                 case .userCancelled:
                     await MainActor.run {
-                        _ = self.purchase_completed.emit(nil, StoreKitStatus.userCancelled.rawValue, "User cancelled")
+                        _ = self.purchase_completed.emit(nil, StoreKitStatus.USER_CANCELLED.rawValue, "User cancelled")
                     }
                 case .pending:
                     await MainActor.run {
-                        _ = self.purchase_completed.emit(nil, StoreKitStatus.purchasePending.rawValue, "Purchase pending")
+                        _ = self.purchase_completed.emit(nil, StoreKitStatus.PURCHASE_PENDING.rawValue, "Purchase pending")
                     }
                 @unknown default:
                     await MainActor.run {
-                        _ = self.purchase_completed.emit(nil, StoreKitStatus.unknownStatus.rawValue, "Unknown purchase result")
+                        _ = self.purchase_completed.emit(nil, StoreKitStatus.UNKNOWN_STATUS.rawValue, "Unknown purchase result")
                     }
                 }
             } catch {
                 await MainActor.run {
-                    _ = self.purchase_completed.emit(nil, StoreKitStatus.cancelled.rawValue, error.localizedDescription)
+                    _ = self.purchase_completed.emit(nil, StoreKitStatus.CANCELLED.rawValue, error.localizedDescription)
                 }
             }
         }
@@ -203,11 +203,11 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
             do {
                 try await AppStore.sync()
                 await MainActor.run {
-                    _ = self.restore_completed.emit(StoreKitStatus.ok.rawValue, "")
+                    _ = self.restore_completed.emit(StoreKitStatus.OK.rawValue, "")
                 }
             } catch {
                 await MainActor.run {
-                    _ = self.restore_completed.emit(StoreKitStatus.cancelled.rawValue, error.localizedDescription)
+                    _ = self.restore_completed.emit(StoreKitStatus.CANCELLED.rawValue, error.localizedDescription)
                 }
             }
         }

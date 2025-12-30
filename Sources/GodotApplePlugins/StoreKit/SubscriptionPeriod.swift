@@ -18,20 +18,20 @@ class StoreProductSubscriptionPeriod: RefCounted, @unchecked Sendable {
     }
 
     enum Unit: Int, CaseIterable {
-        case day
-        case month
-        case week
-        case year
+        case DAY
+        case MONTH
+        case WEEK
+        case YEAR
     }
     @Export var value: Int { period?.value ?? 0 }
     @Export var unit: Unit {
         switch period?.unit {
-        case .day: return .day
-        case .month: return .month
-        case .week: return .week
-        case .year: return .year
+        case .day: return .DAY
+        case .month: return .MONTH
+        case .week: return .WEEK
+        case .year: return .YEAR
             // should not happen, but to make the compiler happy
-        default: return .day
+        default: return .DAY
         }
     }
     @Export var unitLocalized: String { period?.unit.localizedDescription ?? "" }

@@ -8,42 +8,42 @@ import SwiftGodotRuntime
 
 extension AVAudioSession {
     public enum SessionCategory: Int64, CaseIterable {
-        case ambient
-        case multiRoute
-        case playAndRecord
-        case playback
-        case record
-        case soloAmbient
-        case unknown
+        case AMBIENT
+        case MULTI_ROUTE
+        case PLAY_AND_RECORD
+        case PLAYBACK
+        case RECORD
+        case SOLO_AMBIENT
+        case UNKNOWN
     }
 
     public enum SessionMode: Int64, CaseIterable {
-        case `default`
-        case gameChat
-        case measurement
-        case moviePlayback
-        case spokenAudio
-        case videoChat
-        case voiceChat
-        case voicePrompt
+        case DEFAULT
+        case GAME_CHAT
+        case MEASUREMENT
+        case MOVIE_PLAYBACK
+        case SPOKEN_AUDIO
+        case VIDEO_CHAT
+        case VOICE_CHAT
+        case VOICE_PROMPT
     }
 
     public enum RouteSharingPolicy: Int64, CaseIterable {
-        case `default`
-        case longFormAudio
-        case independent
-        case longForm
+        case DEFAULT
+        case LONG_FORM_AUDIO
+        case INDEPENDENT
+        case LONG_FORM
     }
     
     public enum CategoryOptions: Int64, CaseIterable {
-        case mixWithOthers = 1
-        case duckOthers = 2
-        case allowBluetooth = 4
-        case defaultToSpeaker = 8
-        case interruptSpokenAudioAndMixWithOthers = 17
-        case allowBluetoothA2DP = 32
-        case allowAirPlay = 64
-        case overrideMutedMicrophoneInterruption = 128
+        case MIX_WITH_OTHERS = 1
+        case DUCK_OTHERS = 2
+        case ALLOW_BLUETOOTH = 4
+        case DEFAULT_TO_SPEAKER = 8
+        case INTERRUPT_SPOKEN_AUDIO_AND_MIX_WITH_OTHERS = 17
+        case ALLOW_BLUETOOTH_A2DP = 32
+        case ALLOW_AIRPLAY = 64
+        case OVERRIDE_MUTED_MICROPHONE_INTERRUPTION = 128
     }
 }
 #if os(iOS) || os(tvOS) || os(visionOS)
@@ -52,19 +52,19 @@ import AVFoundation
 extension AVAudioSession.SessionCategory {
     func toAVAudioSessionCategory() -> AVFoundation.AVAudioSession.Category {
         switch self {
-        case .ambient:
+        case .AMBIENT:
             return .ambient
-        case .multiRoute:
+        case .MULTI_ROUTE:
             return .multiRoute
-        case .playAndRecord:
+        case .PLAY_AND_RECORD:
             return .playAndRecord
-        case .playback:
+        case .PLAYBACK:
             return .playback
-        case .record:
+        case .RECORD:
             return .record
-        case .soloAmbient:
+        case .SOLO_AMBIENT:
             return .soloAmbient
-        case .unknown:
+        case .UNKNOWN:
             return .ambient
         }
     }
@@ -73,14 +73,14 @@ extension AVAudioSession.SessionCategory {
 extension AVAudioSession.SessionMode {
     func toAVAudioSessionMode() -> AVFoundation.AVAudioSession.Mode {
         switch self {
-        case .default: return .default
-        case .gameChat: return .gameChat
-        case .measurement: return .measurement
-        case .moviePlayback: return .moviePlayback
-        case .spokenAudio: return .spokenAudio
-        case .videoChat: return .videoChat
-        case .voiceChat: return .voiceChat
-        case .voicePrompt: return .voicePrompt
+        case .DEFAULT: return .default
+        case .GAME_CHAT: return .gameChat
+        case .MEASUREMENT: return .measurement
+        case .MOVIE_PLAYBACK: return .moviePlayback
+        case .SPOKEN_AUDIO: return .spokenAudio
+        case .VIDEO_CHAT: return .videoChat
+        case .VOICE_CHAT: return .voiceChat
+        case .VOICE_PROMPT: return .voicePrompt
         }
     }
 }
@@ -88,10 +88,10 @@ extension AVAudioSession.SessionMode {
 extension AVAudioSession.RouteSharingPolicy {
     func toAVAudioSessionRouteSharingPolicy() -> AVFoundation.AVAudioSession.RouteSharingPolicy {
         switch self {
-        case .default: return .default
-        case .longFormAudio: return .longFormAudio
-        case .independent: return .independent
-        case .longForm: return .longFormAudio
+        case .DEFAULT: return .default
+        case .LONG_FORM_AUDIO: return .longFormAudio
+        case .INDEPENDENT: return .independent
+        case .LONG_FORM: return .longFormAudio
         }
     }
 }
@@ -102,17 +102,17 @@ public class AVAudioSession: RefCounted, @unchecked Sendable {
         get {
             switch AVFoundation.AVAudioSession.sharedInstance().category {
             case .ambient:
-                return .ambient
+                return .AMBIENT
             case .multiRoute:
-                return .multiRoute
+                return .MULTI_ROUTE
             case .playback:
-                return .playback
+                return .PLAYBACK
             case .playAndRecord:
-                return .playAndRecord
+                return .PLAY_AND_RECORD
             case .soloAmbient:
-                return .soloAmbient
+                return .SOLO_AMBIENT
             default:
-                return .unknown
+                return .UNKNOWN
             }
         }
         set {
@@ -140,7 +140,7 @@ public class AVAudioSession: RefCounted, @unchecked Sendable {
 public class AVAudioSession: RefCounted, @unchecked Sendable {
     @Export var currentCategory: SessionCategory {
         get {
-            return .unknown
+            return .UNKNOWN
         }
         set {
             // ignore

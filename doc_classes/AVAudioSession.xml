@@ -11,11 +11,11 @@
 	<tutorials>
 	</tutorials>
 	<methods>
-		<method name="set_category" qualifiers="const">
-			<return type="int" enum="Error" />
-			<param index="0" name="category" type="int" enum="AVAudioSession.SessionCategory" />
-			<param index="1" name="mode" type="int" enum="AVAudioSession.SessionMode" />
-			<param index="2" name="policy" type="int" enum="AVAudioSession.RouteSharingPolicy" />
+		<method name="set_category">
+			<return type="int" />
+			<param index="0" name="category" type="SessionCategory" />
+			<param index="1" name="mode" type="SessionMode" />
+			<param index="2" name="policy" type="RouteSharingPolicy" />
 			<param index="3" name="options" type="int" />
 			<description>
 				Sets the shared audio session category, mode, route sharing policy, and options.
@@ -23,13 +23,13 @@
 				[param mode]: The audio session mode (e.g., [constant DEFAULT], [constant GAME_CHAT]).
 				[param policy]: The route sharing policy (e.g., [constant DEFAULT], [constant LONG_FORM_AUDIO]).
 				[param options]: A bitmask of [enum CategoryOptions] values (e.g., [code]AVAudioSession.MIX_WITH_OTHERS | AVAudioSession.DUCK_OTHERS[/code]).
-				
+
 				Returns [constant OK] on success, or [constant FAILED] if the setting could not be applied (e.g. on macOS where this is not supported, or if an error occurs).
 			</description>
 		</method>
 	</methods>
 	<members>
-		<member name="current_category" type="int" setter="set_current_category" getter="get_current_category" enum="AVAudioSession.SessionCategory" default="6">
+		<member name="current_category" type="int" setter="set_current_category" getter="get_current_category" default="6">
 			The current audio session category.
 		</member>
 	</members>

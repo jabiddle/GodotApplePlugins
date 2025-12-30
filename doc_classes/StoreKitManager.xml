@@ -99,25 +99,25 @@
 		</signal>
 	</signals>
 	<constants>
-		<constant name="ok" value="0" enum="StoreKitStatus">
+		<constant name="OK" value="0" enum="StoreKitStatus">
 			The operation completed successfully.
 		</constant>
-		<constant name="invalidProduct" value="1" enum="StoreKitStatus">
+		<constant name="INVALID_PRODUCT" value="1" enum="StoreKitStatus">
 			The product identifier is invalid.
 		</constant>
-		<constant name="cancelled" value="2" enum="StoreKitStatus">
+		<constant name="CANCELLED" value="2" enum="StoreKitStatus">
 			The operation was cancelled.
 		</constant>
-		<constant name="unverifiedTransaction" value="3" enum="StoreKitStatus">
+		<constant name="UNVERIFIED_TRANSACTION" value="3" enum="StoreKitStatus">
 			The transaction could not be verified.
 		</constant>
-		<constant name="userCancelled" value="4" enum="StoreKitStatus">
+		<constant name="USER_CANCELLED" value="4" enum="StoreKitStatus">
 			The user cancelled the operation.
 		</constant>
-		<constant name="purchasePending" value="5" enum="StoreKitStatus">
+		<constant name="PURCHASE_PENDING" value="5" enum="StoreKitStatus">
 			The purchase is pending (e.g., waiting for parental approval).
 		</constant>
-		<constant name="unknownStatus" value="6" enum="StoreKitStatus">
+		<constant name="UNKNOWN_STATUS" value="6" enum="StoreKitStatus">
 			An unknown status occurred.
 		</constant>
 	</constants>

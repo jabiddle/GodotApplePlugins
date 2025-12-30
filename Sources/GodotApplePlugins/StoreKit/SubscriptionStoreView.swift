@@ -16,17 +16,17 @@ class SubscriptionStoreView: RefCounted, @unchecked Sendable {
     
     // Enum for SubscriptionStoreControlStyle
     enum ControlStyle: Int, CaseIterable {
-        case automatic
-        case picker
-        case buttons
-        case compactPicker
-        case prominentPicker
-        case pagedPicker
-        case pagedProminentPicker
+        case AUTOMATIC
+        case PICKER
+        case BUTTONS
+        case COMPACT_PICKER
+        case PROMINENT_PICKER
+        case PAGED_PICKER
+        case PAGED_PROMINENT_PICKER
     }
     
-    @Export(.enum) var controlStyle: ControlStyle = .automatic
-    
+    @Export(.enum) var controlStyle: ControlStyle = .AUTOMATIC
+
     struct ShowSubscriptionStoreView: View {
         @Environment(\.dismiss) private var dismiss
         var groupID: String
@@ -65,7 +65,7 @@ class SubscriptionStoreView: RefCounted, @unchecked Sendable {
                 // Ugly, but not sure what to do other than AnyViewing itall.
                 Group {
                     switch controlStyle {
-                    case .automatic:
+                    case .AUTOMATIC:
                         if !groupID.isEmpty {
                             StoreKit.SubscriptionStoreView(groupID: groupID)
                                 .subscriptionStoreControlStyle(.automatic)
@@ -73,7 +73,7 @@ class SubscriptionStoreView: RefCounted, @unchecked Sendable {
                             StoreKit.SubscriptionStoreView(productIDs: ids)
                                 .subscriptionStoreControlStyle(.automatic)
                         }
-                    case .picker:
+                    case .PICKER:
                         if !groupID.isEmpty {
                             StoreKit.SubscriptionStoreView(groupID: groupID)
                                 .subscriptionStoreControlStyle(.automatic)
@@ -81,7 +81,7 @@ class SubscriptionStoreView: RefCounted, @unchecked Sendable {
                             StoreKit.SubscriptionStoreView(productIDs: ids)
                                 .subscriptionStoreControlStyle(.automatic)
                         }
-                    case .buttons:
+                    case .BUTTONS:
                         if !groupID.isEmpty {
                             StoreKit.SubscriptionStoreView(groupID: groupID)
                                 .subscriptionStoreControlStyle(.automatic)
@@ -89,7 +89,7 @@ class SubscriptionStoreView: RefCounted, @unchecked Sendable {
                             StoreKit.SubscriptionStoreView(productIDs: ids)
                                 .subscriptionStoreControlStyle(.automatic)
                         }
-                    case .compactPicker:
+                    case .COMPACT_PICKER:
                         if !groupID.isEmpty {
                             StoreKit.SubscriptionStoreView(groupID: groupID)
                                 .subscriptionStoreControlStyle(.automatic)
@@ -97,7 +97,7 @@ class SubscriptionStoreView: RefCounted, @unchecked Sendable {
                             StoreKit.SubscriptionStoreView(productIDs: ids)
                                 .subscriptionStoreControlStyle(.automatic)
                         }
-                    case .prominentPicker:
+                    case .PROMINENT_PICKER:
                         if !groupID.isEmpty {
                             StoreKit.SubscriptionStoreView(groupID: groupID)
                                 .subscriptionStoreControlStyle(.automatic)
@@ -105,7 +105,7 @@ class SubscriptionStoreView: RefCounted, @unchecked Sendable {
                             StoreKit.SubscriptionStoreView(productIDs: ids)
                                 .subscriptionStoreControlStyle(.automatic)
                         }
-                    case .pagedPicker:
+                    case .PAGED_PICKER:
                         if !groupID.isEmpty {
                             StoreKit.SubscriptionStoreView(groupID: groupID)
                                 .subscriptionStoreControlStyle(.automatic)
@@ -113,7 +113,7 @@ class SubscriptionStoreView: RefCounted, @unchecked Sendable {
                             StoreKit.SubscriptionStoreView(productIDs: ids)
                                 .subscriptionStoreControlStyle(.automatic)
                         }
-                    case .pagedProminentPicker:
+                    case .PAGED_PROMINENT_PICKER:
                         if !groupID.isEmpty {
                             StoreKit.SubscriptionStoreView(groupID: groupID)
                                 .subscriptionStoreControlStyle(.automatic)

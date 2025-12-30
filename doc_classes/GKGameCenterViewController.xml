@@ -55,22 +55,22 @@
 		</method>
 	</methods>
 	<constants>
-		<constant name="defaultScreen" value="0" enum="State">
+		<constant name="DEFAULT_SCREEN" value="0" enum="State">
 			The default screen.
 		</constant>
-		<constant name="leaderboards" value="1" enum="State">
+		<constant name="LEADERBOARDS" value="1" enum="State">
 			The leaderboard sets or leaderboards if there are no sets.
 		</constant>
-		<constant name="achievements" value="2" enum="State">
+		<constant name="ACHIEVEMENTS" value="2" enum="State">
 			The list of achievement.
 		</constant>
-		<constant name="localPlayerProfile" value="3" enum="State">
+		<constant name="LOCAL_PLAYER_PROFILE" value="3" enum="State">
 			The local player
 		</constant>
-		<constant name="dashboard" value="4" enum="State">
+		<constant name="DASHBOARD" value="4" enum="State">
 			The dashboard.
 		</constant>
-		<constant name="localPlayerFriendsList" value="5" enum="State">
+		<constant name="LOCAL_PLAYER_FRIENDS_LIST" value="5" enum="State">
 			The friends list.
 		</constant>
 	</constants>

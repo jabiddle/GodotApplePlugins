@@ -124,10 +124,10 @@
 		</signal>
 	</signals>
 	<constants>
-		<constant name="reliable" value="0" enum="SendDataMode">
+		<constant name="RELIABLE" value="0" enum="SendDataMode">
 			Uses GameKit's reliable data channel (ordered delivery with retries).
 		</constant>
-		<constant name="unreliable" value="1" enum="SendDataMode">
+		<constant name="UNRELIABLE" value="1" enum="SendDataMode">
 			Uses GameKit's unreliable channel, useful for latency-sensitive updates.
 		</constant>
 	</constants>

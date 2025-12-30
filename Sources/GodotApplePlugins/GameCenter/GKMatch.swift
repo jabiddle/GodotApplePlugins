@@ -21,12 +21,12 @@ class GKMatch: RefCounted, @unchecked Sendable {
     var delegate: Proxy?
 
     enum SendDataMode: Int, CaseIterable {
-        case reliable
-        case unreliable
+        case RELIABLE
+        case UNRELIABLE
         func toGameKit() -> GameKit.GKMatch.SendDataMode {
             switch self {
-            case .reliable: return .reliable
-            case .unreliable: return .unreliable
+            case .RELIABLE: return .reliable
+            case .UNRELIABLE: return .unreliable
             }
         }
     }

@@ -19,33 +19,33 @@ class GKLeaderboard: RefCounted, @unchecked Sendable {
     var board: GameKit.GKLeaderboard = GameKit.GKLeaderboard()
 
     enum AppleLeaderboardType: Int, CaseIterable {
-        case classic
-        case recurring
-        case unknown
+        case CLASSIC
+        case RECURRING
+        case UNKNOWN
     }
 
     enum TimeScope: Int, CaseIterable {
-        case today
-        case week
-        case allTime
+        case TODAY
+        case WEEK
+        case ALL_TIME
 
         func toGameKit() -> GameKit.GKLeaderboard.TimeScope {
             switch self {
-            case .today: return .today
-            case .week: return .week
-            case .allTime: return .allTime
+            case .TODAY: return .today
+            case .WEEK: return .week
+            case .ALL_TIME: return .allTime
             }
         }
     }
 
     enum PlayerScope: Int, CaseIterable {
-        case global
-        case friendsOnly
+        case GLOBAL
+        case FRIENDS_ONLY
 
         func toGameKit() -> GameKit.GKLeaderboard.PlayerScope {
             switch self {
-            case .global: return .global
-            case .friendsOnly: return .friendsOnly
+            case .GLOBAL: return .global
+            case .FRIENDS_ONLY: return .friendsOnly
             }
         }
     }
@@ -58,9 +58,9 @@ class GKLeaderboard: RefCounted, @unchecked Sendable {
     @Export var title: String { board.title ?? "" }
     @Export(.enum) var type: AppleLeaderboardType {
         switch board.type {
-        case .classic: return .classic
-        case .recurring: return .recurring
-        default: return .unknown
+        case .classic: return .CLASSIC
+        case .recurring: return .RECURRING
+        default: return .UNKNOWN
         }
     }
 

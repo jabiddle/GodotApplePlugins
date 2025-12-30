@@ -115,27 +115,27 @@
 		</member>
 	</members>
 	<constants>
-		<constant name="classic" value="0" enum="AppleLeaderboardType">
+		<constant name="CLASSIC" value="0" enum="AppleLeaderboardType">
 			A leaderboard that never expires, showing all-time rankings of all players.
 		</constant>
-		<constant name="recurring" value="1" enum="AppleLeaderboardType">
+		<constant name="RECURRING" value="1" enum="AppleLeaderboardType">
 			A leaderboard that recurs, allowing players a fresh start to compete and earn higher ranks in each ocurrence.
 		</constant>
-		<constant name="unknown" value="2" enum="AppleLeaderboardType">
+		<constant name="UNKNOWN" value="2" enum="AppleLeaderboardType">
 		</constant>
-		<constant name="today" value="0" enum="TimeScope">
+		<constant name="TODAY" value="0" enum="TimeScope">
 			Scans the current day.
 		</constant>
-		<constant name="week" value="1" enum="TimeScope">
+		<constant name="WEEK" value="1" enum="TimeScope">
 			Restricts results to the current week.
 		</constant>
-		<constant name="allTime" value="2" enum="TimeScope">
+		<constant name="ALL_TIME" value="2" enum="TimeScope">
 			Returns scores across the entire history of the leaderboard.
 		</constant>
-		<constant name="global" value="0" enum="PlayerScope">
+		<constant name="GLOBAL" value="0" enum="PlayerScope">
 			Loads data for all players of the game.
 		</constant>
-		<constant name="friendsOnly" value="1" enum="PlayerScope">
+		<constant name="FRIENDS_ONLY" value="1" enum="PlayerScope">
 			Loads only data for friends of the local player.
 		</constant>
 	</constants>

@@ -17,14 +17,14 @@ class ProductView: RefCounted, @unchecked Sendable {
 
     // Enum for ProductViewStyle
     enum ViewStyle: Int, CaseIterable {
-        case automatic = 0
-        case compact = 1
-        case large = 2
-        case regular = 3
+        case AUTOMATIC = 0
+        case COMPACT = 1
+        case LARGE = 2
+        case REGULAR = 3
     }
     
-    @Export(.enum) var style: ViewStyle = .automatic
-    
+    @Export(.enum) var style: ViewStyle = .AUTOMATIC
+
     @Callable
     func present() {
         guard !productId.isEmpty else { return }
@@ -35,13 +35,13 @@ class ProductView: RefCounted, @unchecked Sendable {
             }
             
             switch style {
-            case .automatic:
+            case .AUTOMATIC:
                 self.presentWrapped(view.productViewStyle(.automatic))
-            case .compact:
+            case .COMPACT:
                 self.presentWrapped(view.productViewStyle(.compact))
-            case .large:
+            case .LARGE:
                 self.presentWrapped(view.productViewStyle(.large))
-            case .regular:
+            case .REGULAR:
                 self.presentWrapped(view.productViewStyle(.regular))
             }
         }

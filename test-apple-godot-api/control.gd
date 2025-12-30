@@ -21,6 +21,10 @@ func _on_button_pressed() -> void:
 	# Request full name and email
 	auth_controller.signin_with_scopes(["full_name", "email"])
 	var d = GKMatch.new()
+	var x: AVAudioSession.SessionCategory
+	x = AVAudioSession.SessionCategory.AMBIENT
+	print(x)
+
 	
 
 func _on_authorization_completed(credential):
@@ -101,8 +105,8 @@ func _on_button_requestmatch_pressed() -> void:
 				var first = local
 				var second = local
 				
-				gameMatch.send_data_to_all_players(array, GKMatch.SendDataMode.reliable)
+				gameMatch.send_data_to_all_players(array, GKMatch.SendDataMode.RELIABLE)
 				
-				gameMatch.send(array, [first, second], GKMatch.SendDataMode.reliable)
+				gameMatch.send(array, [first, second], GKMatch.SendDataMode.RELIABLE)
 		)
 		print("Not authenticated, authenticate first")

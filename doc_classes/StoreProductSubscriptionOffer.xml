@@ -9,16 +9,16 @@
 	<tutorials>
 	</tutorials>
 	<constants>
-		<constant name="introductory" value="0" enum="OfferType">
+		<constant name="INTRODUCTORY" value="0" enum="OfferType">
 			An introductory offer for new subscribers.
 		</constant>
-		<constant name="promotional" value="1" enum="OfferType">
+		<constant name="PROMOTIONAL" value="1" enum="OfferType">
 			A promotional offer for existing or lapsed subscribers.
 		</constant>
-		<constant name="winBack" value="2" enum="OfferType">
+		<constant name="WIN_BACK" value="2" enum="OfferType">
 			A win-back offer for lapsed subscribers.
 		</constant>
-		<constant name="unknown" value="3" enum="OfferType">
+		<constant name="UNKNOWN" value="3" enum="OfferType">
 			An unknown offer type.
 		</constant>
 	</constants>

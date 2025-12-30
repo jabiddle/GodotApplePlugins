@@ -38,26 +38,26 @@ class GKGameCenterViewController: RefCounted, @unchecked Sendable {
     }
 
     enum State: Int, CaseIterable {
-        case defaultScreen
-        case leaderboards
-        case achievements
-        case localPlayerProfile
-        case dashboard
-        case localPlayerFriendsList
+        case DEFAULT_SCREEN
+        case LEADERBOARDS
+        case ACHIEVEMENTS
+        case LOCAL_PLAYER_PROFILE
+        case DASHBOARD
+        case LOCAL_PLAYER_FRIENDS_LIST
 
         func toGameKit() -> GameKit.GKGameCenterViewControllerState {
             switch self {
-                case .defaultScreen:
+            case .DEFAULT_SCREEN:
                 return .default
-            case .leaderboards:
+            case .LEADERBOARDS:
                 return .leaderboards
-            case .achievements:
+            case .ACHIEVEMENTS:
                 return .achievements
-            case .localPlayerProfile:
+            case .LOCAL_PLAYER_PROFILE:
                 return .localPlayerProfile
-            case .dashboard:
+            case .DASHBOARD:
                 return .dashboard
-            case .localPlayerFriendsList:
+            case .LOCAL_PLAYER_FRIENDS_LIST:
                 return .localPlayerFriendsList
             }
         }

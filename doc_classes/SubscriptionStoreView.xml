@@ -34,25 +34,25 @@
 		</member>
 	</members>
 	<constants>
-		<constant name="automatic" value="0" enum="ControlStyle">
+		<constant name="AUTOMATIC" value="0" enum="ControlStyle">
 			The system automatically chooses the most appropriate style.
 		</constant>
-		<constant name="picker" value="1" enum="ControlStyle">
+		<constant name="PICKER" value="1" enum="ControlStyle">
 			A picker style.
 		</constant>
-		<constant name="buttons" value="2" enum="ControlStyle">
+		<constant name="BUTTONS" value="2" enum="ControlStyle">
 			A button-based style.
 		</constant>
-		<constant name="compactPicker" value="3" enum="ControlStyle">
+		<constant name="COMPACT_PICKER" value="3" enum="ControlStyle">
 			A compact picker style.
 		</constant>
-		<constant name="prominentPicker" value="4" enum="ControlStyle">
+		<constant name="PROMINENT_PICKER" value="4" enum="ControlStyle">
 			A prominent picker style.
 		</constant>
-		<constant name="pagedPicker" value="5" enum="ControlStyle">
+		<constant name="PAGED_PICKER" value="5" enum="ControlStyle">
 			A paged picker style.
 		</constant>
-		<constant name="pagedProminentPicker" value="6" enum="ControlStyle">
+		<constant name="PAGED_PROMINENT_PICKER" value="6" enum="ControlStyle">
 			A prominent paged picker style.
 		</constant>
 	</constants>

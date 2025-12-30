@@ -34,6 +34,9 @@
 		</method>
 	</methods>
 	<members>
+		<member name="access_point" type="GKAccessPoint" setter="" getter="get_access_point">
+			Access the shared [GKAccessPoint] object to manage the visibility and state of the Game Center access point.
+		</member>
 		<member name="local_player" type="GKLocalPlayer" setter="set_local_player" getter="get_local_player">
 			Returns the wrapper for [code skip-lint]GKLocalPlayer.local[/code]. Use this after successful authentication to call methods such as [code]load_friends()[/code] or [code]fetch_items_for_identity_verification_signature()[/code].
 		</member>

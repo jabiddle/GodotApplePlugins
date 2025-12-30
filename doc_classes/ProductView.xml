@@ -37,16 +37,16 @@
 		</member>
 	</members>
 	<constants>
-		<constant name="automatic" value="0" enum="ViewStyle">
+		<constant name="AUTOMATIC" value="0" enum="ViewStyle">
 			The system automatically chooses the most appropriate style.
 		</constant>
-		<constant name="compact" value="1" enum="ViewStyle">
+		<constant name="COMPACT" value="1" enum="ViewStyle">
 			A compact style that displays minimal information.
 		</constant>
-		<constant name="large" value="2" enum="ViewStyle">
+		<constant name="LARGE" value="2" enum="ViewStyle">
 			A large style that displays more detailed information.
 		</constant>
-		<constant name="regular" value="3" enum="ViewStyle">
+		<constant name="REGULAR" value="3" enum="ViewStyle">
 			The regular style.
 		</constant>
 	</constants>

@@ -54,31 +54,31 @@ class ASAuthorizationAppleIDCredential: RefCounted, @unchecked Sendable {
     }
 
     enum UserDetectionStatus: Int, CaseIterable {
-        case unsupported = 0
-        case unknown = 1
-        case likelyReal = 2
-        
+        case UNSUPPORTED = 0
+        case UNKNOWN = 1
+        case LIKELY_REAL = 2
+
         static func from(_ status: ASUserDetectionStatus) -> UserDetectionStatus {
             switch status {
-            case .unsupported: return .unsupported
-            case .unknown: return .unknown
-            case .likelyReal: return .likelyReal
-            @unknown default: return .unknown
+            case .unsupported: return .UNSUPPORTED
+            case .unknown: return .UNKNOWN
+            case .likelyReal: return .LIKELY_REAL
+            @unknown default: return .UNKNOWN
             }
         }
     }
 
     enum UserAgeRange: Int, CaseIterable {
-        case notknown = 0
-        case child = 1
-        case notChild = 2
-        
+        case NOT_KNOWN = 0
+        case CHILD = 1
+        case NOT_CHILD = 2
+
         static func from(_ range: ASUserAgeRange) -> UserAgeRange {
             switch range {
-            case .unknown: return .notknown
-            case .child: return .child
-            case .notChild: return .notChild
-            @unknown default: return .notknown
+            case .unknown: return .NOT_KNOWN
+            case .child: return .CHILD
+            case .notChild: return .NOT_CHILD
+            @unknown default: return .NOT_KNOWN
             }
         }
     }
