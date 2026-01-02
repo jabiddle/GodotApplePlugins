@@ -68,6 +68,7 @@ import SwiftGodotRuntime
 
         ProductView.ViewStyle.self,
         StoreKitManager.StoreKitStatus.self,
+        StoreKitManager.VerificationError.self,
         SubscriptionStoreView.ControlStyle.self,
         StoreProductSubscriptionOffer.OfferType.self,
         StoreProductSubscriptionPeriod.Unit.self,
