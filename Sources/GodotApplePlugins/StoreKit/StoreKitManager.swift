@@ -146,13 +146,9 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
             // In a real app, we might want to wait until the user has unlocked content,
             // but for this binding, we'll emit the signal and finish it.
             // The user can check the transaction state.
-            Task {
-                await transaction.finish()
-            }
-            
+
             // Emit signal on main thread
             Task { @MainActor in
-                GD.print("Posting transaction_updated")
                 self.transaction_updated.emit(storeTransaction)
             }
         case .unverified(let transaction, let verificationError):
@@ -211,7 +207,6 @@ public class StoreKitManager: RefCounted, @unchecked Sendable {
                     switch verification {
                     case .verified(let transaction):
                         let storeTransaction = StoreTransaction(transaction)
-                        await transaction.finish()
                         await MainActor.run {
                             _ = self.purchase_completed.emit(storeTransaction, StoreKitStatus.OK.rawValue, "")
                         }
