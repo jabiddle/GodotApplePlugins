@@ -28,6 +28,10 @@ switch to "Release Mode" and set "Create Merged Binary" to "Manual"
 and you will further reduce the size of your executable (about 1.7
 megs at the time of this writing).
 
+# Requirements
+
+iOS 17.0, MacOS Sonoma (14.0)
+
 # API Design
 
 The API surfaced by this add-ons is to be as close to possible to the Apple APIs (classes, methods names, enumerations) and to avoid attempting to provide an abstraction over them - as these tend to have impedance mismatches.  
