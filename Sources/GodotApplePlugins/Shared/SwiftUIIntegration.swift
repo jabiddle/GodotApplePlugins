@@ -18,7 +18,7 @@ import UIKit
 import AppKit
 #endif
 
-#if canImport(UIKIt)
+#if canImport(UIKit)
 @MainActor
 func presentSwiftUIOverlayFromTopMost<V: View>(_ view: V) {
     guard let presenter = topMostViewController() else {

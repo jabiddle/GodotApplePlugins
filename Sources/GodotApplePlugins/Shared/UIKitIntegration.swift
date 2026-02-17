@@ -10,18 +10,19 @@ import SwiftGodotRuntime
 
 extension UIApplication {
     var activeWindowScene: UIWindowScene? {
-        connectedScenes
+        let scenes = connectedScenes
             .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
+        return scenes.first { $0.activationState == .foregroundActive }
+            ?? scenes.first { $0.activationState == .foregroundInactive }
     }
 
     var keyWindow: UIWindow? {
         // Preferred for iOS 13+
         if let scene = activeWindowScene {
-            return scene.windows.first { $0.isKeyWindow }
+            return scene.windows.first { $0.isKeyWindow } ?? scene.windows.first
         }
         // Fallback (older / weird cases)
-        return windows.first { $0.isKeyWindow }
+        return windows.first { $0.isKeyWindow } ?? windows.first
     }
 
     var topMostViewController: UIViewController? {
@@ -71,6 +72,12 @@ func topMostViewController() -> UIViewController? {
 func presentOnTop(_ vc: UIViewController) {
     guard let top = topMostViewController() else {
         print("Could not find the top view controller")
+        return
+    }
+    guard !top.isBeingDismissed else {
+        DispatchQueue.main.async {
+            presentOnTop(vc)
+        }
         return
     }
     top.present(vc, animated: true)

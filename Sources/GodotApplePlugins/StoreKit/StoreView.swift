@@ -16,7 +16,10 @@ class StoreView: RefCounted, @unchecked Sendable {
     
     @Callable
     func present() {
-        guard productIds.count > 0 else { return }
+        guard productIds.count > 0 else {
+            GD.print("StoreView.present: no product IDs configured")
+            return
+        }
         
         var ids: [String] = []
         for id in productIds {
