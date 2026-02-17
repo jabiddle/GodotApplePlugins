@@ -62,34 +62,6 @@ jobs:
             fi
           done
 
-      - name: Notarize and Staple
-        if: env.MACOS_CERTIFICATE != ''
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          # Create a temporary zip for notarization
-          ditto -c -k --sequesterRsrc addons notarize-payload.zip
-
-          # Submit for notarization and wait
-          xcrun notarytool submit notarize-payload.zip \
-            --apple-id "$APPLE_ID" \
-            --password "$APPLE_ID_PASSWORD" \
-            --team-id "$APPLE_TEAM_ID" \
-            --wait
-
-          # Staple each framework
-          for fw in addons/*/bin/*.framework; do
-            if [[ -d "$fw" ]]; then
-              echo "Stapling $fw"
-              xcrun stapler staple "$fw"
-            fi
-          done
-
-          rm notarize-payload.zip
-
       - name: Archive addons directory
         run: |
           PACKAGE_NAME="GodotApplePlugins-addons-${GITHUB_SHA}.zip"
@@ -97,6 +69,20 @@ jobs:
           mv addons dist
           ditto -c -k --sequesterRsrc --keepParent dist "$PACKAGE_NAME"
           echo "PACKAGE_NAME=$PACKAGE_NAME" >> "$GITHUB_ENV"
+
+      - name: Notarize
+        if: env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool submit "$PACKAGE_NAME" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/heads/')
