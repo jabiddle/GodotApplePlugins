@@ -80,19 +80,33 @@ check_swiftsyntax:
 package: build dist
 
 dist:
+dist:
 	for framework in $(FRAMEWORK_NAMES); do \
 		config_lc=`echo $(CONFIG) | tr '[:upper:]' '[:lower:]'`; \
 		out_dir="$(CURDIR)/addons/$$framework/bin/$$config_lc"; \
 		mkdir -p $$out_dir; \
 		rm -rf $$out_dir/$$framework.xcframework; \
 		rm -rf $$out_dir/$$framework*.framework; \
-		$(XCODEBUILD) -create-xcframework \
-			-framework $(DERIVED_DATA)/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework \
-			-output $$out_dir/$${framework}.xcframework; \
-		rsync -a $(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $$out_dir/$${framework}_x64.framework; \
-		rsync -a $(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $$out_dir/$${framework}.framework; \
-		rsync -a doc_classes/ $$out_dir/$${framework}_x64.framework/Resources/doc_classes/; \
-		rsync -a doc_classes/ $$out_dir/$${framework}.framework/Resources/doc_classes/; \
+		\
+		if [ -d "$(DERIVED_DATA)/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework" ]; then \
+			$(XCODEBUILD) -create-xcframework \
+				-framework $(DERIVED_DATA)/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework \
+				-output $$out_dir/$${framework}.xcframework; \
+		fi; \
+		\
+		if [ -d "$(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/" ]; then \
+			rsync -a $(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $$out_dir/$${framework}_x64.framework; \
+			if [ -d "doc_classes/" ]; then \
+				rsync -a doc_classes/ $$out_dir/$${framework}_x64.framework/Resources/doc_classes/; \
+			fi; \
+		fi; \
+		\
+		if [ -d "$(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/" ]; then \
+			rsync -a $(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $$out_dir/$${framework}.framework; \
+			if [ -d "doc_classes/" ]; then \
+				rsync -a doc_classes/ $$out_dir/$${framework}.framework/Resources/doc_classes/; \
+			fi; \
+		fi; \
 	done
 
 XCFRAMEWORK_GODOTAPPLEPLUGINS ?= $(CURDIR)/addons/GodotApplePlugins/bin/GodotApplePlugins.xcframework
