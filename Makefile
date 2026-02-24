@@ -8,6 +8,7 @@ WORKSPACE ?= .swiftpm/xcode/package.xcworkspace
 SCHEME ?= GodotApplePlugins
 FRAMEWORK_NAMES ?= GodotApplePlugins
 XCODEBUILD ?= xcodebuild
+XCODEBUILD_ARGS ?=
 
 run:
 	@echo -e "Run make xcframework to produce the binary payloads for all platforms"
@@ -37,6 +38,7 @@ build:
 			-configuration '$(CONFIG)' \
 			-destination "$$dest" \
 			-derivedDataPath "$(DERIVED_DATA)$$suffix" \
+			$(XCODEBUILD_ARGS) \
 			build; \
 		if [ "$$platform_lc" = "ios" ] || [ "$$platform_lc" = "macos" ]; then \
 			$(CURDIR)/relink_without_swiftsyntax.sh \
