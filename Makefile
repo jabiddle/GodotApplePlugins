@@ -1,8 +1,7 @@
-.PHONY: run xcframework check_swiftsyntax
+.PHONY: run xcframework check_swiftsyntax build pre-build build-ios build-macos
 
 # Allow overriding common build knobs.
 CONFIG ?= Release
-DESTINATIONS ?= generic/platform=iOS platform=macOS,arch=arm64 platform=macOS,arch=x86_64
 DERIVED_DATA ?= $(CURDIR)/.xcodebuild
 WORKSPACE ?= .swiftpm/xcode/package.xcworkspace
 SCHEME ?= GodotApplePlugins
@@ -13,45 +12,54 @@ XCODEBUILD_ARGS ?=
 run:
 	@echo -e "Run make xcframework to produce the binary payloads for all platforms"
 
-build:
+# The master build target triggers the prerequisite and explicit platform targets
+build: pre-build build-ios build-macos
+
+pre-build:
+	@echo "Pre-building Swift Macros natively..."
+	swift build
+
+build-ios:
+	@echo "Building for iOS..."
 	set -e; \
-	swift build; \
-	for dest in $(DESTINATIONS); do \
-		suffix=`echo $$dest | sed 's,generic/platform=[a-zA-Z]*,,' | sed 's,platform=[a-zA-Z]*,,' | sed 's/,arch=//'`; \
-		platform_name=`echo $$dest | sed -n 's/.*platform=\([a-zA-Z0-9_]*\).*/\1/p'`; \
-		if [ -z "$$platform_name" ]; then \
-			platform_name="iOS"; \
-		fi; \
-		platform_lc=`echo $$platform_name | tr '[:upper:]' '[:lower:]'`; \
-		arch_name=`echo $$dest | sed -n 's/.*arch=\([a-zA-Z0-9_]*\).*/\1/p'`; \
-		if [ -z "$$arch_name" ] && [ "$$platform_lc" = "ios" ]; then \
-			arch_name="arm64"; \
-		fi; \
-		if [ -z "$$arch_name" ] && [ "$$platform_lc" = "macos" ]; then \
-			arch_name=`uname -m`; \
-		fi; \
-		echo HERE: $$suffix; \
-	    for framework in $(FRAMEWORK_NAMES); do \
+	for framework in $(FRAMEWORK_NAMES); do \
 		$(XCODEBUILD) \
 			-workspace '$(WORKSPACE)' \
 			-scheme $$framework \
 			-configuration '$(CONFIG)' \
-			-destination "$$dest" \
-			-derivedDataPath "$(DERIVED_DATA)$$suffix" \
+			-destination "generic/platform=iOS" \
+			-derivedDataPath "$(DERIVED_DATA)-ios" \
 			$(XCODEBUILD_ARGS) \
 			build; \
-		if [ "$$platform_lc" = "ios" ] || [ "$$platform_lc" = "macos" ]; then \
-			$(CURDIR)/relink_without_swiftsyntax.sh \
-				--derived-data "$(DERIVED_DATA)$$suffix" \
-				--config "$(CONFIG)" \
-				--framework $$framework \
-				--platform $$platform_lc \
-				--arch $$arch_name; \
-		else \
-			echo "Skipping SwiftSyntax relink for $$framework on $$dest (unsupported platform)"; \
-		fi; \
-	    done;  \
-	done; \
+		\
+		$(CURDIR)/relink_without_swiftsyntax.sh \
+			--derived-data "$(DERIVED_DATA)-ios" \
+			--config "$(CONFIG)" \
+			--framework $$framework \
+			--platform ios; \
+	done
+
+build-macos:
+	@echo "Building for macOS Universal..."
+	set -e; \
+	for framework in $(FRAMEWORK_NAMES); do \
+		$(XCODEBUILD) \
+			-workspace '$(WORKSPACE)' \
+			-scheme $$framework \
+			-configuration '$(CONFIG)' \
+			-destination "generic/platform=macOS" \
+			-derivedDataPath "$(DERIVED_DATA)-macos" \
+			ARCHS="x86_64 arm64" \
+			ONLY_ACTIVE_ARCH=NO \
+			$(XCODEBUILD_ARGS) \
+			build; \
+		\
+		$(CURDIR)/relink_without_swiftsyntax.sh \
+			--derived-data "$(DERIVED_DATA)-macos" \
+			--config "$(CONFIG)" \
+			--framework $$framework \
+			--platform macos; \
+	done
 
 check_swiftsyntax:
 	set -e; \
@@ -71,16 +79,15 @@ check_swiftsyntax:
 		fi; \
 	}; \
 	for framework in $(FRAMEWORK_NAMES); do \
-		check_one iphoneos "$(DERIVED_DATA)/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework/$$framework" "iOS/$$framework"; \
-		check_one macosx "$(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$$framework.framework/$$framework" "macOS arm64/$$framework"; \
-		check_one macosx "$(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$$framework.framework/$$framework" "macOS x86_64/$$framework"; \
+		check_one iphoneos "$(DERIVED_DATA)-ios/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework/$$framework" "iOS/$$framework"; \
+		check_one macosx "$(DERIVED_DATA)-macos/Build/Products/$(CONFIG)/PackageFrameworks/$$framework.framework/$$framework" "macOS Universal/$$framework"; \
 	done; \
 	test "$$failed" -eq 0
 
 package: build dist
 
 dist:
-dist:
+	set -e; \
 	for framework in $(FRAMEWORK_NAMES); do \
 		config_lc=`echo $(CONFIG) | tr '[:upper:]' '[:lower:]'`; \
 		out_dir="$(CURDIR)/addons/$$framework/bin/$$config_lc"; \
@@ -88,24 +95,28 @@ dist:
 		rm -rf $$out_dir/$$framework.xcframework; \
 		rm -rf $$out_dir/$$framework*.framework; \
 		\
-		if [ -d "$(DERIVED_DATA)/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework" ]; then \
+		if [ -d "$(DERIVED_DATA)-ios/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework" ]; then \
 			$(XCODEBUILD) -create-xcframework \
-				-framework $(DERIVED_DATA)/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework \
-				-output $$out_dir/$${framework}.xcframework; \
+				-framework "$(DERIVED_DATA)-ios/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework" \
+				-output "$$out_dir/$${framework}.xcframework"; \
+		else \
+			echo "Skipping iOS xcframework creation for $$framework (directory not found)"; \
 		fi; \
 		\
-		if [ -d "$(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/" ]; then \
-			rsync -a $(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $$out_dir/$${framework}_x64.framework; \
+		MAC_FW="$(DERIVED_DATA)-macos/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework"; \
+		if [ -d "$$MAC_FW" ]; then \
+			rsync -a "$$MAC_FW/" "$$out_dir/$${framework}_x64.framework"; \
+			lipo -thin x86_64 "$$out_dir/$${framework}_x64.framework/Versions/Current/$${framework}" -output "$$out_dir/$${framework}_x64.framework/Versions/Current/$${framework}" 2>/dev/null || true; \
+			\
+			rsync -a "$$MAC_FW/" "$$out_dir/$${framework}.framework"; \
+			lipo -thin arm64 "$$out_dir/$${framework}.framework/Versions/Current/$${framework}" -output "$$out_dir/$${framework}.framework/Versions/Current/$${framework}" 2>/dev/null || true; \
+			\
 			if [ -d "doc_classes/" ]; then \
-				rsync -a doc_classes/ $$out_dir/$${framework}_x64.framework/Resources/doc_classes/; \
+				rsync -a "doc_classes/" "$$out_dir/$${framework}_x64.framework/Resources/doc_classes/" 2>/dev/null || true; \
+				rsync -a "doc_classes/" "$$out_dir/$${framework}.framework/Resources/doc_classes/" 2>/dev/null || true; \
 			fi; \
-		fi; \
-		\
-		if [ -d "$(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/" ]; then \
-			rsync -a $(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $$out_dir/$${framework}.framework; \
-			if [ -d "doc_classes/" ]; then \
-				rsync -a doc_classes/ $$out_dir/$${framework}.framework/Resources/doc_classes/; \
-			fi; \
+		else \
+			echo "Skipping macOS framework copy for $$framework (directory not found)"; \
 		fi; \
 	done
 
@@ -143,4 +154,4 @@ make oo:
 	$(XCODEBUILD) -create-xcframework \
 		-framework ~/DerivedData/GodotApplePlugins-*/Build/Products/Debug-iphoneos/PackageFrameworks/GodotApplePlugins.framework/ \
 		-framework ~/DerivedData/GodotApplePlugins-*/Build/Products/Debug/PackageFrameworks/GodotApplePlugins.framework/ \
-		-output '$(XCFRAMEWORK_EXPORT_PATH)'	
+		-output '$(XCFRAMEWORK_EXPORT_PATH)'
