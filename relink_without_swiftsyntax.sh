@@ -138,7 +138,7 @@ while IFS= read -r -d '' candidate; do
 		break
 	fi
 done < <(find "$DERIVED_DATA/Build/Intermediates.noindex" \
-	-path "*Objects-normal/$ARCH/$FRAMEWORK.LinkFileList" -print0 2>/dev/null || true)
+	-path "*/$CONFIG_SUFFIX/*/Objects-normal/$ARCH/$FRAMEWORK.LinkFileList" -print0 2>/dev/null || true)
 
 if [[ -z "$link_file" ]]; then
 	echo "No SwiftSyntax references found for $FRAMEWORK ($platform_lc/$ARCH); nothing to relink."
@@ -174,7 +174,7 @@ fi
 # Locate the directory that contains module artifacts for the framework.
 module_dir=""
 module_file=$(find "$DERIVED_DATA/Build/Intermediates.noindex" \
-	-path "*Objects-normal/$ARCH/$FRAMEWORK.swiftmodule" -print -quit 2>/dev/null || true)
+	-path "*/$CONFIG_SUFFIX/*/Objects-normal/$ARCH/$FRAMEWORK.swiftmodule" -print -quit 2>/dev/null || true)
 if [[ -n "$module_file" ]]; then
 	module_dir=$(dirname "$module_file")
 fi

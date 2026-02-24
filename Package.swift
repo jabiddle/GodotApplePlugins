@@ -39,6 +39,10 @@ let package = Package(
             dependencies: [
                 .product(name: "SwiftGodotRuntimeStatic", package: "SwiftGodot")
             ],
+            exclude: [
+                "GameCenter/GameCenterGuide.md",
+                "GameCenter/Entitlements.md"
+            ],
             swiftSettings: swiftSettings,
             linkerSettings: linkerSettings
         ),
