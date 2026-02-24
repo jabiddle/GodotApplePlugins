@@ -79,15 +79,18 @@ package: build dist
 
 dist:
 	for framework in $(FRAMEWORK_NAMES); do \
-		rm -rf $(CURDIR)/addons/$$framework/bin/$$framework.xcframework; \
-		rm -rf $(CURDIR)/addons/$$framework/bin/$$framework*.framework; \
+		config_lc=`echo $(CONFIG) | tr '[:upper:]' '[:lower:]'`; \
+		out_dir="$(CURDIR)/addons/$$framework/bin/$$config_lc"; \
+		mkdir -p $$out_dir; \
+		rm -rf $$out_dir/$$framework.xcframework; \
+		rm -rf $$out_dir/$$framework*.framework; \
 		$(XCODEBUILD) -create-xcframework \
 			-framework $(DERIVED_DATA)/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework \
-			-output $(CURDIR)/addons/$$framework/bin/$${framework}.xcframework; \
-		rsync -a $(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $(CURDIR)/addons/$$framework/bin/$${framework}_x64.framework; \
-		rsync -a $(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $(CURDIR)/addons/$$framework/bin/$${framework}.framework; \
-		rsync -a doc_classes/ $(CURDIR)/addons/$$framework/bin/$${framework}_x64.framework/Resources/doc_classes/; \
-		rsync -a doc_classes/ $(CURDIR)/addons/$$framework/bin/$${framework}.framework/Resources/doc_classes/; \
+			-output $$out_dir/$${framework}.xcframework; \
+		rsync -a $(DERIVED_DATA)x86_64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $$out_dir/$${framework}_x64.framework; \
+		rsync -a $(DERIVED_DATA)arm64/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework/ $$out_dir/$${framework}.framework; \
+		rsync -a doc_classes/ $$out_dir/$${framework}_x64.framework/Resources/doc_classes/; \
+		rsync -a doc_classes/ $$out_dir/$${framework}.framework/Resources/doc_classes/; \
 	done
 
 XCFRAMEWORK_GODOTAPPLEPLUGINS ?= $(CURDIR)/addons/GodotApplePlugins/bin/GodotApplePlugins.xcframework

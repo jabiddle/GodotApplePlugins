@@ -6,3 +6,4 @@
 .xcframework
 .xcodebuild
 .xcodebuildx86_64
+addons/GodotApplePlugins/bin/*
