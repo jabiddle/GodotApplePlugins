@@ -14,6 +14,17 @@ import SwiftGodotRuntime
 
         Foundation.self,
         AppleURL.self,
+        
+        CHHapticError.self,
+        CHHapticEngine.self,
+        CHHapticPattern.self,
+        CHHapticPatternPlayer.self,
+        CHHapticAdvancedPatternPlayer.self,
+        CHHapticEventParameter.self,
+        CHHapticParameterCurve.self,
+        CHHapticParameterCurveControlPoint.self,
+        CHHapticDynamicParameter.self,
+        CHHapticEvent.self,
 
         GameCenterManager.self,
         GKAccessPoint.self,
