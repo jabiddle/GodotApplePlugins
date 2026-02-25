@@ -112,8 +112,8 @@ dist:
 			lipo -thin arm64 "$$out_dir/$${framework}.framework/Versions/Current/$${framework}" -output "$$out_dir/$${framework}.framework/Versions/Current/$${framework}" 2>/dev/null || true; \
 			\
 			if [ -d "doc_classes/" ]; then \
-				rsync -a "doc_classes/" "$$out_dir/$${framework}_x64.framework/Resources/doc_classes/" 2>/dev/null || true; \
-				rsync -a "doc_classes/" "$$out_dir/$${framework}.framework/Resources/doc_classes/" 2>/dev/null || true; \
+				rsync -a "doc_classes/" "$$out_dir/$${framework}_x64.framework/Versions/Current/Resources/doc_classes/" 2>/dev/null || true; \
+				rsync -a "doc_classes/" "$$out_dir/$${framework}.framework/Versions/Current/Resources/doc_classes/" 2>/dev/null || true; \
 			fi; \
 		else \
 			echo "Skipping macOS framework copy for $$framework (directory not found)"; \
