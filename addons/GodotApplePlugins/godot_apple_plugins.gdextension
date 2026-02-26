@@ -4,12 +4,10 @@ entry_symbol = "godot_apple_plugins_start"
 compatibility_minimum = 4.4
 
 [libraries]
-# iOS Routing
-ios.debug = "res://addons/GodotApplePlugins/bin/debug/GodotApplePlugins.xcframework"
-ios.release = "res://addons/GodotApplePlugins/bin/release/GodotApplePlugins.xcframework"
+ios.debug.arm64 = "./bin/debug/GodotApplePlugins.xcframework"
+macos.debug.arm64 = "./bin/debug/GodotApplePlugins.framework"
+macos.debug.x86_64 = "./bin/debug/GodotApplePlugins_x64.framework"
 
-# macOS Routing
-macos.debug.arm64 = "res://addons/GodotApplePlugins/bin/debug/GodotApplePlugins.framework"
-macos.release.arm64 = "res://addons/GodotApplePlugins/bin/release/GodotApplePlugins.framework"
-macos.debug.x86_64 = "res://addons/GodotApplePlugins/bin/debug/GodotApplePlugins_x64.framework"
-macos.release.x86_64 = "res://addons/GodotApplePlugins/bin/release/GodotApplePlugins_x64.framework"
+ios.release.arm64 = "./bin/release/GodotApplePlugins.xcframework"
+macos.release.arm64 = "./bin/release/GodotApplePlugins.framework"
+macos.release.x86_64 = "./bin/release/GodotApplePlugins_x64.framework"
