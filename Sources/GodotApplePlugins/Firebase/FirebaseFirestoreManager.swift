@@ -50,7 +50,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                     for (key, value) in documentSnap.data() {
                         gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
                     }
-                    results.append(value: Variant(gDict))
+                    results.append(Variant(gDict))
                 }
                 DispatchQueue.main.async { self.collection_read.emit(collection, results) }
             }
@@ -61,8 +61,9 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func add_document(collection: String, data: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in data.keys() {
-            let k = String(key)
-            if let val = data[key] { props[k] = FirebaseVariantConverter.variantToAny(val) }
+            if let k = String(key), let val = data[key] {
+                props[k] = FirebaseVariantConverter.variantToAny(val)
+            }
         }
         let db = Firestore.firestore()
         var ref: DocumentReference? = nil
@@ -80,8 +81,9 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func set_document(collection: String, document: String, data: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in data.keys() {
-            let k = String(key)
-            if let val = data[key] { props[k] = FirebaseVariantConverter.variantToAny(val) }
+            if let k = String(key), let val = data[key] {
+                props[k] = FirebaseVariantConverter.variantToAny(val)
+            }
         }
         let db = Firestore.firestore()
         db.collection(collection).document(document).setData(props) { [weak self] error in
@@ -98,8 +100,9 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func update_document(collection: String, document: String, data: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in data.keys() {
-            let k = String(key)
-            if let val = data[key] { props[k] = FirebaseVariantConverter.variantToAny(val) }
+            if let k = String(key), let val = data[key] {
+                props[k] = FirebaseVariantConverter.variantToAny(val)
+            }
         }
         let db = Firestore.firestore()
         db.collection(collection).document(document).updateData(props) { [weak self] error in

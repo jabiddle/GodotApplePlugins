@@ -18,29 +18,31 @@ enum FirebaseVariantConverter {
         case .bool: return Bool(variant) ?? false
         case .string: return String(variant) ?? ""
         case .dictionary:
-            let gDict = VariantDictionary(variant)
+            guard let gDict = VariantDictionary(variant) else { return [:] }
             var swiftDict: [String: Any] = [:]
             for key in gDict.keys() {
-                if let val = gDict[key] {
-                    swiftDict[String(key)] = variantToAny(val)
+                if let k = String(key), let val = gDict[key] {
+                    swiftDict[k] = variantToAny(val)
                 }
             }
             return swiftDict
         case .array:
-            let gArray = VariantArray(variant)
+            guard let gArray = VariantArray(variant) else { return [] }
             var swiftArray: [Any] = []
             for i in 0..<Int(gArray.count) {
-                swiftArray.append(variantToAny(gArray[Int64(i)]))
+                if let val = gArray[Int64(i)] {
+                    swiftArray.append(variantToAny(val))
+                }
             }
             return swiftArray
         case .packedByteArray:
-            return PackedByteArray(variant).asData() ?? Data()
+            return PackedByteArray(variant)?.asData() ?? Data()
         default: return variant.description
         }
     }
     
     static func anyToVariant(_ value: Any) -> Variant {
-        if value is NSNull { return Variant() }
+        if value is NSNull { return Variant(Int?.none) }
         if let intVal = value as? Int { return Variant(intVal) }
         if let doubleVal = value as? Double { return Variant(doubleVal) }
         if let boolVal = value as? Bool { return Variant(boolVal) }
@@ -65,7 +67,7 @@ enum FirebaseVariantConverter {
         if let arrayVal = value as? [Any] {
             let gArray = VariantArray()
             for v in arrayVal {
-                gArray.append(value: anyToVariant(v))
+                gArray.append(anyToVariant(v))
             }
             return Variant(gArray)
         }

@@ -16,8 +16,7 @@ class FirebaseAnalyticsManager: RefCounted, @unchecked Sendable {
     func log_event(name: String, parameters: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in parameters.keys() {
-            let k = String(key)
-            if let variantVal = parameters[key] {
+            if let k = String(key), let variantVal = parameters[key] {
                 props[k] = FirebaseVariantConverter.variantToAny(variantVal)
             }
         }

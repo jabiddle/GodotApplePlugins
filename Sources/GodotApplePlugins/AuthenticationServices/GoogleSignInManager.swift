@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SwiftGodotRuntime
+@preconcurrency import SwiftGodotRuntime
 import GoogleSignIn
 
 #if os(iOS)
@@ -16,10 +16,10 @@ import AppKit
 #endif
 
 @Godot
-class GoogleSignInManager: RefCounted {
+class GoogleSignInManager: RefCounted, @unchecked Sendable {
     
-    #signal("sign_in_completed", arguments: ["id_token": String.self, "access_token": String.self])
-    #signal("sign_in_failed", arguments: ["error": String.self])
+    @Signal("id_token", "access_token") var sign_in_completed: SignalWithArguments<String, String>
+    @Signal("error") var sign_in_failed: SignalWithArguments<String>
     
     @Callable
     func sign_in() {
@@ -28,13 +28,13 @@ class GoogleSignInManager: RefCounted {
             guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                   let window = windowScene.windows.first(where: { $0.isKeyWindow }),
                   let rootViewController = window.rootViewController else {
-                self.emit(signal: "sign_in_failed", "Could not find root view controller.")
+                self.sign_in_failed.emit("Could not find root view controller.")
                 return
             }
             let presentingOrigin = rootViewController
             #elseif os(macOS)
             guard let window = NSApplication.shared.windows.first else {
-                self.emit(signal: "sign_in_failed", "Could not find main window.")
+                self.sign_in_failed.emit("Could not find main window.")
                 return
             }
             let presentingOrigin = window
@@ -42,19 +42,19 @@ class GoogleSignInManager: RefCounted {
             
             GIDSignIn.sharedInstance.signIn(withPresenting: presentingOrigin) { signInResult, error in
                 if let error = error {
-                    self.emit(signal: "sign_in_failed", error.localizedDescription)
+                    self.sign_in_failed.emit(error.localizedDescription)
                     return
                 }
                 
                 guard let result = signInResult else {
-                    self.emit(signal: "sign_in_failed", "Unknown sign in error.")
+                    self.sign_in_failed.emit("Unknown sign in error.")
                     return
                 }
                 
                 let idToken = result.user.idToken?.tokenString ?? ""
                 let accessToken = result.user.accessToken.tokenString
                 
-                self.emit(signal: "sign_in_completed", idToken, accessToken)
+                self.sign_in_completed.emit(idToken, accessToken)
             }
         }
     }
