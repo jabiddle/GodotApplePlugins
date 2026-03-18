@@ -3,7 +3,7 @@
 # Xcode incorrectly links SwiftSyntax into runtime payloads when using macro
 # packages. This script rebuilds the already-compiled binary using the same
 # object files but filters SwiftSyntax objects out of the link file list.
-# Dynamically detects Universal (fat) binaries and relinks each architecture separately.
+# Dynamically detects Universal binaries and caches linker commands for fast incremental builds.
 
 set -euo pipefail
 
@@ -12,11 +12,7 @@ MACOS_DEPLOYMENT_TARGET=${MACOS_DEPLOYMENT_TARGET:-14.0}
 
 usage() {
     cat <<'EOF'
-Usage: relink_without_swiftsyntax.sh --derived-data <path> --config <cfg> --framework <name> --platform <ios|macos> [--arch <arch>]
-
-Environment overrides:
-  IOS_DEPLOYMENT_TARGET  (default: 17.0)
-  MACOS_DEPLOYMENT_TARGET (default: 14.0)
+Usage: relink_without_swiftsyntax.sh --derived-data <path> --config <cfg> --framework <name> --platform <ios|macos> [--arch <arch>] --build-log <log_path>
 EOF
 }
 
@@ -25,6 +21,7 @@ CONFIG=""
 FRAMEWORK=""
 PLATFORM=""
 ARCH=""
+BUILD_LOG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -33,19 +30,20 @@ while [[ $# -gt 0 ]]; do
         --framework) FRAMEWORK="$2"; shift 2 ;;
         --platform) PLATFORM="$2"; shift 2 ;;
         --arch) ARCH="$2"; shift 2 ;;
+        --build-log) BUILD_LOG="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
     esac
 done
 
-if [[ -z "$DERIVED_DATA" || -z "$CONFIG" || -z "$FRAMEWORK" || -z "$PLATFORM" ]]; then
-    echo "Missing required arguments" >&2
-    usage
+if [[ ! -f "$BUILD_LOG" ]]; then
+    echo "Build log not found at $BUILD_LOG. Cannot extract linker command." >&2
     exit 1
 fi
 
-if [[ ! -d "$DERIVED_DATA/Build/Products" ]]; then
-    echo "Derived data path looks invalid: $DERIVED_DATA" >&2
+if [[ -z "$DERIVED_DATA" || -z "$CONFIG" || -z "$FRAMEWORK" || -z "$PLATFORM" ]]; then
+    echo "Missing required arguments" >&2
+    usage
     exit 1
 fi
 
@@ -76,11 +74,8 @@ FRAMEWORK_BINARY="$FRAMEWORK_DIR/$FRAMEWORK"
 
 FRAMEWORK_BINARY_REAL=""
 if [[ -e "$FRAMEWORK_BINARY" ]]; then
-    FRAMEWORK_BINARY_REAL=$(python3 - <<'PY' "$FRAMEWORK_BINARY"
-import os, sys
-print(os.path.realpath(sys.argv[1]))
-PY
-)
+    # Safely extract realpath via python
+    FRAMEWORK_BINARY_REAL=$(python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$FRAMEWORK_BINARY")
 fi
 
 if [[ -z "$FRAMEWORK_BINARY_REAL" || ! -f "$FRAMEWORK_BINARY_REAL" ]]; then
@@ -114,9 +109,9 @@ else
     exit 1
 fi
 
-# Track files for cleanup
+# Track files for cleanup (guarded against older bash unbound array errors)
 declare -a TMP_FILES=()
-trap 'rm -f "${TMP_FILES[@]}"' EXIT
+trap '[[ ${#TMP_FILES[@]} -gt 0 ]] && rm -f "${TMP_FILES[@]}"' EXIT
 
 declare -a NEW_THIN_BINARIES=()
 
@@ -143,7 +138,8 @@ for CURRENT_ARCH in $ARCHS; do
 
     filtered_file=$(mktemp "/tmp/${FRAMEWORK}.NoSwiftSyntax.LinkFileList.XXXXXX")
     TMP_FILES+=("$filtered_file")
-    python3 - <<'PY' "$link_file" "$filtered_file"
+    
+    python3 -c '
 import sys
 source, dest = sys.argv[1:3]
 patterns = ("SwiftSyntax", "SwiftParser", "SwiftDiagnostics", "SwiftParserDiagnostics", "SwiftBasicFormat", "_SwiftSyntaxCShims", "ExtensionApi")
@@ -151,95 +147,61 @@ with open(source) as src, open(dest, "w") as dst:
     for line in src:
         if not any(token in line for token in patterns):
             dst.write(line)
-PY
+' "$link_file" "$filtered_file"
 
     if ! grep -q '[^[:space:]]' "$filtered_file"; then
         echo "Filtered link file list is empty for $CURRENT_ARCH, aborting." >&2
         exit 1
     fi
 
-    module_dir=""
-    module_file=$(find "$DERIVED_DATA/Build/Intermediates.noindex" \
-        -path "*/$CONFIG_SUFFIX/*/Objects-normal/$CURRENT_ARCH/$FRAMEWORK.swiftmodule" -print -quit 2>/dev/null || true)
-    if [[ -n "$module_file" ]]; then
-        module_dir=$(dirname "$module_file")
-    fi
-
-    linker_resp=""
-    lto_file=""
-    dep_info=""
-    if [[ -n "$module_dir" ]]; then
-        [[ -f "$module_dir/$FRAMEWORK-linker-args.resp" ]] && linker_resp="$module_dir/$FRAMEWORK-linker-args.resp"
-        [[ -f "$module_dir/${FRAMEWORK}_lto.o" ]] && lto_file="$module_dir/${FRAMEWORK}_lto.o"
-        [[ -f "$module_dir/${FRAMEWORK}_dependency_info.dat" ]] && dep_info="$module_dir/${FRAMEWORK}_dependency_info.dat"
-    fi
-
-    SDK_PATH=$(xcrun --sdk "$SDK" --show-sdk-path)
-    PLATFORM_PATH=$(xcrun --sdk "$SDK" --show-sdk-platform-path)
-    CLANG=$(xcrun --sdk "$SDK" --find clang)
-    SWIFTC_PATH=$(xcrun --find swiftc)
-    TOOLCHAIN_DIR=$(cd "$(dirname "$SWIFTC_PATH")/.." && pwd)
-    SWIFT_LIB_DIR="$TOOLCHAIN_DIR/lib/swift/$SDK"
-
-    EAGER_TBD_DIR="$DERIVED_DATA/Build/Intermediates.noindex/EagerLinkingTBDs/$CONFIG_SUFFIX"
-    PLATFORM_DEV_LIB="$PLATFORM_PATH/Developer/usr/lib"
-    DEVELOPER_FRAMEWORKS="$PLATFORM_PATH/Developer/Library/Frameworks"
-    SDK_DEVELOPER_FRAMEWORKS="$SDK_PATH/Developer/Library/Frameworks"
-
-    TARGET_TRIPLE="${CURRENT_ARCH}-apple-${TRIPLE_BASE}${TARGET_VERSION}"
-    
-    # Extract Install Name dynamically while ignoring header architectures lines
-    INSTALL_NAME=$(otool -D "$FRAMEWORK_BINARY_REAL" 2>/dev/null | grep -v ':$' | head -n 1 || true)
-    if [[ -z "$INSTALL_NAME" ]]; then
-        if [[ "$platform_lc" = "macos" ]]; then
-            INSTALL_NAME="@rpath/$FRAMEWORK.framework/Versions/A/$FRAMEWORK"
-        else
-            INSTALL_NAME="@rpath/$FRAMEWORK.framework/$FRAMEWORK"
-        fi
-    fi
-
     tmp_binary=$(mktemp "/tmp/${FRAMEWORK}.relinked.${CURRENT_ARCH}.XXXXXX")
     TMP_FILES+=("$tmp_binary")
 
-    link_args=(
-        "$CLANG" "-Xlinker" "-reproducible" "-target" "$TARGET_TRIPLE" "-dynamiclib"
-        "-isysroot" "$SDK_PATH" "-O0" "-filelist" "$filtered_file" "-install_name" "$INSTALL_NAME"
-        "-Xlinker" "-rpath" "-Xlinker" "/usr/lib/swift" "-dead_strip" "-rdynamic"
-        "-Xlinker" "-no_deduplicate" "-fobjc-link-runtime" "-Wl,-no_warn_duplicate_libraries"
-        "-Wl,-make_mergeable" "-Xlinker" "-dead_strip" "-o" "$tmp_binary"
-    )
+    cmd_cache_file="$DERIVED_DATA/Build/Intermediates.noindex/${FRAMEWORK}.${CURRENT_ARCH}.linker_cmd.txt"
 
-    if [[ -d "$EAGER_TBD_DIR" ]]; then link_args+=("-L$EAGER_TBD_DIR" "-F$EAGER_TBD_DIR"); fi
-    if [[ -d "$PRODUCTS_DIR" ]]; then link_args+=("-L$PRODUCTS_DIR" "-F$PRODUCTS_DIR"); fi
-    if [[ -d "$PRODUCTS_DIR/PackageFrameworks" ]]; then
-        link_args+=("-F$PRODUCTS_DIR/PackageFrameworks" "-Xlinker" "-rpath" "-Xlinker" "$PRODUCTS_DIR/PackageFrameworks")
-    elif [[ -d "$(dirname "$FRAMEWORK_DIR")" ]]; then
-        parent_dir="$(dirname "$FRAMEWORK_DIR")"
-        link_args+=("-F$parent_dir" "-Xlinker" "-rpath" "-Xlinker" "$parent_dir")
-    fi
+    echo "  -> Extracting original linker command for $CURRENT_ARCH..."
     
-    if [[ -d "$PLATFORM_DEV_LIB" ]]; then link_args+=("-L$PLATFORM_DEV_LIB"); fi
-    if [[ -d "$SWIFT_LIB_DIR" ]]; then link_args+=("-L$SWIFT_LIB_DIR"); fi
-    link_args+=("-L/usr/lib/swift")
-    if [[ -d "$DEVELOPER_FRAMEWORKS" ]]; then link_args+=("-iframework" "$DEVELOPER_FRAMEWORKS"); fi
-    if [[ -d "$SDK_DEVELOPER_FRAMEWORKS" ]]; then link_args+=("-iframework" "$SDK_DEVELOPER_FRAMEWORKS"); fi
+    python3 - "$BUILD_LOG" "$CURRENT_ARCH" "$FRAMEWORK" "$filtered_file" "$tmp_binary" "$cmd_cache_file" <<'EOF'
+import sys, shlex, subprocess, os
 
-    if [[ -n "$lto_file" ]]; then link_args+=("-Xlinker" "-object_path_lto" "-Xlinker" "$lto_file"); fi
-    if [[ -n "$dep_info" ]]; then link_args+=("-Xlinker" "-dependency_info" "-Xlinker" "$dep_info"); fi
+log_path, arch, framework, new_filelist, out_binary, cache_path = sys.argv[1:7]
 
-    if [[ -n "$module_dir" ]]; then
-        for ext in swiftmodule swiftdoc swiftinterface swiftsourceinfo abi.json swiftconstvalues; do
-            for candidate in "$module_dir"/$FRAMEWORK*".$ext"; do
-                if [[ -f "$candidate" ]]; then link_args+=("-Xlinker" "-add_ast_path" "-Xlinker" "$candidate"); fi
-            done
-        done
-    fi
+target_cmd = None
+with open(log_path, 'r') as f:
+    for line in f:
+        # Match target arch dynamically, removing SwiftSyntax
+        if ('/clang' in line or '/swiftc' in line) and f'-target {arch}-' in line and f'/{framework}' in line and '-filelist' in line:
+            target_cmd = line.strip()
+            break
 
-    if [[ -n "$linker_resp" ]]; then link_args+=("@$linker_resp"); fi
+if target_cmd:
+    with open(cache_path, 'w') as f:
+        f.write(target_cmd)
+else:
+    if os.path.exists(cache_path):
+        print("  -> Xcode build was cached. Reusing saved linker command...")
+        with open(cache_path, 'r') as f:
+            target_cmd = f.read().strip()
 
-    echo "  -> Relinking architecture $CURRENT_ARCH without SwiftSyntax..."
-    "${link_args[@]}"
+if not target_cmd:
+    print(f"Error: Could not find original linker command for {arch} in build log or cache. Please run a clean build (rm -rf .xcodebuild-ios).")
+    sys.exit(1)
 
+tokens = shlex.split(target_cmd)
+
+for i, token in enumerate(tokens):
+    if token == '-filelist' and i + 1 < len(tokens):
+        tokens[i+1] = new_filelist
+    elif token == '-o' and i + 1 < len(tokens):
+        tokens[i+1] = out_binary
+
+try:
+    subprocess.run(tokens, check=True)
+except subprocess.CalledProcessError as e:
+    print(f"Relink failed for {arch}")
+    sys.exit(e.returncode)
+EOF
+    
     NEW_THIN_BINARIES+=("$tmp_binary")
 done
 

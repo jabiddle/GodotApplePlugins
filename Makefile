@@ -34,18 +34,23 @@ build-ios:
 			-destination "generic/platform=iOS" \
 			-derivedDataPath "$(DERIVED_DATA)-ios" \
 			$(XCODEBUILD_ARGS) \
-			build; \
+			build 2>&1 | tee "$(DERIVED_DATA)-ios/build.log"; \
 		\
 		$(CURDIR)/relink_without_swiftsyntax.sh \
 			--derived-data "$(DERIVED_DATA)-ios" \
 			--config "$(CONFIG)" \
 			--framework $$framework \
-			--platform ios; \
+			--platform ios \
+			--build-log "$(DERIVED_DATA)-ios/build.log"; \
 		\
 		echo "Uploading iOS dSYMs to Crashlytics..."; \
 		UPLOAD_TOOL="$(DERIVED_DATA)-ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols"; \
 		DSYM_DIR="$(DERIVED_DATA)-ios/Build/Products/$(CONFIG)-iphoneos/"; \
-		if [ -x "$$UPLOAD_TOOL" ] && [ -d "$$DSYM_DIR" ]; then \
+		if [ "$(CONFIG)" != "Release" ]; then \
+			echo "Skipping dSYM upload for non-Release build ($(CONFIG))."; \
+		elif [ ! -f "$(IOS_PLIST_PATH)" ]; then \
+			echo "GoogleService-Info-iOS.plist not found. Skipping dSYM upload."; \
+		elif [ -x "$$UPLOAD_TOOL" ] && [ -d "$$DSYM_DIR" ]; then \
 			"$$UPLOAD_TOOL" -g "$(IOS_PLIST_PATH)" -p ios "$$DSYM_DIR"; \
 		else \
 			echo "Crashlytics upload tool or dSYM dir not found. Skipping."; \
@@ -65,18 +70,23 @@ build-macos:
 			ARCHS="x86_64 arm64" \
 			ONLY_ACTIVE_ARCH=NO \
 			$(XCODEBUILD_ARGS) \
-			build; \
+			build 2>&1 | tee "$(DERIVED_DATA)-macos/build.log"; \
 		\
 		$(CURDIR)/relink_without_swiftsyntax.sh \
 			--derived-data "$(DERIVED_DATA)-macos" \
 			--config "$(CONFIG)" \
 			--framework $$framework \
-			--platform macos; \
+			--platform macos \
+			--build-log "$(DERIVED_DATA)-macos/build.log"; \
 		\
 		echo "Uploading macOS dSYMs to Crashlytics..."; \
 		UPLOAD_TOOL="$(DERIVED_DATA)-macos/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols"; \
 		DSYM_DIR="$(DERIVED_DATA)-macos/Build/Products/$(CONFIG)/"; \
-		if [ -x "$$UPLOAD_TOOL" ] && [ -d "$$DSYM_DIR" ]; then \
+		if [ "$(CONFIG)" != "Release" ]; then \
+			echo "Skipping dSYM upload for non-Release build ($(CONFIG))."; \
+		elif [ ! -f "$(MACOS_PLIST_PATH)" ]; then \
+			echo "GoogleService-Info-macOS.plist not found. Skipping dSYM upload."; \
+		elif [ -x "$$UPLOAD_TOOL" ] && [ -d "$$DSYM_DIR" ]; then \
 			"$$UPLOAD_TOOL" -g "$(MACOS_PLIST_PATH)" -p mac "$$DSYM_DIR"; \
 		else \
 			echo "Crashlytics upload tool or dSYM dir not found. Skipping."; \
