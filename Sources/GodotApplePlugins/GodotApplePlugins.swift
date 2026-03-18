@@ -64,6 +64,15 @@ import SwiftGodotRuntime
         ASPasswordCredential.self,
         ASAuthorizationController.self,
         ASWebAuthenticationSession.self,
+
+        FirebaseCoreManager.self,
+        FirebaseAnalyticsManager.self,
+        FirebaseCrashlyticsManager.self,
+        FirebaseAuthManager.self,
+        FirebaseFirestoreManager.self,
+        FirebaseStorageManager.self,
+
+        GoogleSignInManager.self,
     ],
     enums: [
         AVAudioSession.CategoryOptions.self,

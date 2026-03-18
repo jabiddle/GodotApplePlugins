@@ -1,0 +1,63 @@
+//
+//  FirebaseAnalyticsManager.swift
+//  GodotApplePlugins
+//
+//  Created by Jacob Biddle on 3/18/26.
+//
+
+import Foundation
+@preconcurrency import SwiftGodotRuntime
+import FirebaseAnalytics
+
+@Godot
+class FirebaseAnalyticsManager: RefCounted, @unchecked Sendable {
+    
+    private func variantToAny(_ variant: Variant) -> Any {
+        switch variant.gtype {
+        case .`nil`: return NSNull()
+        case .int: return Int(variant) ?? 0
+        case .float: return Double(variant) ?? 0.0
+        case .bool: return Bool(variant) ?? false
+        case .string: return String(variant) ?? ""
+        case .dictionary:
+            let gDict = VariantDictionary(variant)
+            var swiftDict: [String: Any] = [:]
+            for key in gDict.keys() {
+                if let val = gDict[key] {
+                    swiftDict[String(key)] = variantToAny(val)
+                }
+            }
+            return swiftDict
+        case .array:
+            let gArray = VariantArray(variant)
+            var swiftArray: [Any] = []
+            for i in 0..<Int(gArray.count) {
+                swiftArray.append(variantToAny(gArray[Int64(i)]))
+            }
+            return swiftArray
+        default: return variant.description
+        }
+    }
+    
+    @Callable
+    func log_event(name: String, parameters: VariantDictionary) {
+        var props: [String: Any] = [:]
+        for key in parameters.keys() {
+            let k = String(key)
+            if let variantVal = parameters[key] {
+                props[k] = variantToAny(variantVal)
+            }
+        }
+        Analytics.logEvent(name, parameters: props)
+    }
+    
+    @Callable
+    func set_user_identifier(userId: String) {
+        Analytics.setUserID(userId)
+    }
+    
+    @Callable
+    func set_user_property(name: String, value: String) {
+        Analytics.setUserProperty(value, forName: name)
+    }
+}

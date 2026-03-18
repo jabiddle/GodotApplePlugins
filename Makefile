@@ -9,6 +9,10 @@ FRAMEWORK_NAMES ?= GodotApplePlugins
 XCODEBUILD ?= xcodebuild
 XCODEBUILD_ARGS ?=
 
+# Firebase plist paths
+IOS_PLIST_PATH ?= $(CURDIR)/GoogleService-Info-iOS.plist
+MACOS_PLIST_PATH ?= $(CURDIR)/GoogleService-Info-macOS.plist
+
 run:
 	@echo -e "Run make xcframework to produce the binary payloads for all platforms"
 
@@ -37,6 +41,15 @@ build-ios:
 			--config "$(CONFIG)" \
 			--framework $$framework \
 			--platform ios; \
+		\
+		echo "Uploading iOS dSYMs to Crashlytics..."; \
+		UPLOAD_TOOL="$(DERIVED_DATA)-ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols"; \
+		DSYM_DIR="$(DERIVED_DATA)-ios/Build/Products/$(CONFIG)-iphoneos/"; \
+		if [ -x "$$UPLOAD_TOOL" ] && [ -d "$$DSYM_DIR" ]; then \
+			"$$UPLOAD_TOOL" -g "$(IOS_PLIST_PATH)" -p ios "$$DSYM_DIR"; \
+		else \
+			echo "Crashlytics upload tool or dSYM dir not found. Skipping."; \
+		fi; \
 	done
 
 build-macos:
@@ -59,6 +72,15 @@ build-macos:
 			--config "$(CONFIG)" \
 			--framework $$framework \
 			--platform macos; \
+		\
+		echo "Uploading macOS dSYMs to Crashlytics..."; \
+		UPLOAD_TOOL="$(DERIVED_DATA)-macos/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols"; \
+		DSYM_DIR="$(DERIVED_DATA)-macos/Build/Products/$(CONFIG)/"; \
+		if [ -x "$$UPLOAD_TOOL" ] && [ -d "$$DSYM_DIR" ]; then \
+			"$$UPLOAD_TOOL" -g "$(MACOS_PLIST_PATH)" -p mac "$$DSYM_DIR"; \
+		else \
+			echo "Crashlytics upload tool or dSYM dir not found. Skipping."; \
+		fi; \
 	done
 
 check_swiftsyntax:
