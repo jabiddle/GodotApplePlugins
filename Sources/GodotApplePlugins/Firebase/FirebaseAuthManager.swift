@@ -46,7 +46,7 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     
     @Callable
     func sign_in_with_apple(idToken: String, rawNonce: String) {
-        let credential = OAuthProvider.credential(providerID: "apple.com", idToken: idToken, rawNonce: rawNonce)
+        let credential = OAuthProvider.credential(providerID: .apple, idToken: idToken, rawNonce: rawNonce)
         Auth.auth().signIn(with: credential) { [weak self] authResult, error in
             guard let self = self else { return }
             if let user = authResult?.user {
