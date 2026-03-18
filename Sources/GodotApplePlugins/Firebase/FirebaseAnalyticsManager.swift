@@ -12,12 +12,12 @@ import FirebaseAnalytics
 @Godot
 class FirebaseAnalyticsManager: RefCounted, @unchecked Sendable {
     
-    @Callable
+@Callable
     func log_event(name: String, parameters: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in parameters.keys() {
-            if let k = String(key), let variantVal = parameters[key] {
-                props[k] = FirebaseVariantConverter.variantToAny(variantVal)
+            if let k = String(key) {
+                props[k] = FirebaseVariantConverter.variantToAny(parameters[key])
             }
         }
         Analytics.logEvent(name, parameters: props)

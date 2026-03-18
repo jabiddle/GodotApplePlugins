@@ -63,8 +63,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func add_document(collection: String, data: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in data.keys() {
-            if let k = String(key), let val = data[key] {
-                props[k] = FirebaseVariantConverter.variantToAny(val)
+            if let k = String(key) {
+                props[k] = FirebaseVariantConverter.variantToAny(data[key])
             }
         }
         let db = Firestore.firestore()
@@ -84,8 +84,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func set_document(collection: String, document: String, data: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in data.keys() {
-            if let k = String(key), let val = data[key] {
-                props[k] = FirebaseVariantConverter.variantToAny(val)
+            if let k = String(key) {
+                props[k] = FirebaseVariantConverter.variantToAny(data[key])
             }
         }
         let db = Firestore.firestore()
@@ -104,8 +104,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func update_document(collection: String, document: String, data: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in data.keys() {
-            if let k = String(key), let val = data[key] {
-                props[k] = FirebaseVariantConverter.variantToAny(val)
+            if let k = String(key) {
+                props[k] = FirebaseVariantConverter.variantToAny(data[key])
             }
         }
         let db = Firestore.firestore()
