@@ -30,7 +30,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                 }
                 DispatchQueue.main.async { self.document_read.emit(collection, document, gDict) }
             } else {
-                DispatchQueue.main.async { self.document_error.emit(error?.localizedDescription ?? "Unknown Firestore error") }
+                let errorDesc = error?.localizedDescription ?? "Unknown Firestore error"
+                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
             }
         }
     }
@@ -41,7 +42,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
         db.collection(collection).getDocuments { [weak self] (querySnapshot, error) in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.document_error.emit(error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
             } else if let querySnapshot = querySnapshot {
                 let results = VariantArray()
                 for documentSnap in querySnapshot.documents {
@@ -70,7 +72,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
         ref = db.collection(collection).addDocument(data: props) { [weak self] error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.document_error.emit(error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
             } else if let docId = ref?.documentID {
                 DispatchQueue.main.async { self.document_added.emit(collection, docId) }
             }
@@ -89,7 +92,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
         db.collection(collection).document(document).setData(props) { [weak self] error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.document_error.emit(error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
             } else {
                 DispatchQueue.main.async { self.update_completed.emit(collection, document) }
             }
@@ -108,7 +112,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
         db.collection(collection).document(document).updateData(props) { [weak self] error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.document_error.emit(error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
             } else {
                 DispatchQueue.main.async { self.update_completed.emit(collection, document) }
             }

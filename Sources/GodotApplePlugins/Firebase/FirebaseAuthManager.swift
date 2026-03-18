@@ -22,7 +22,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         Auth.auth().signInAnonymously { [weak self] authResult, error in
             guard let self = self else { return }
             if let user = authResult?.user {
-                DispatchQueue.main.async { self.auth_state_changed.emit(true, user.uid) }
+                let uid = user.uid
+                DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
             } else {
                 DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
             }
@@ -35,7 +36,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         Auth.auth().signIn(with: credential) { [weak self] authResult, error in
             guard let self = self else { return }
             if let user = authResult?.user {
-                DispatchQueue.main.async { self.auth_state_changed.emit(true, user.uid) }
+                let uid = user.uid
+                DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
             } else {
                 DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
             }
@@ -44,11 +46,12 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     
     @Callable
     func sign_in_with_apple(idToken: String, rawNonce: String) {
-        let credential = OAuthProvider.credential(withProviderID: "apple.com", idToken: idToken, rawNonce: rawNonce)
+        let credential = OAuthProvider.credential(providerID: "apple.com", idToken: idToken, rawNonce: rawNonce)
         Auth.auth().signIn(with: credential) { [weak self] authResult, error in
             guard let self = self else { return }
             if let user = authResult?.user {
-                DispatchQueue.main.async { self.auth_state_changed.emit(true, user.uid) }
+                let uid = user.uid
+                DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
             } else {
                 DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
             }
@@ -60,7 +63,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         Auth.auth().createUser(withEmail: email, password: password) { [weak self] authResult, error in
             guard let self = self else { return }
             if let user = authResult?.user {
-                DispatchQueue.main.async { self.auth_state_changed.emit(true, user.uid) }
+                let uid = user.uid
+                DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
             } else {
                 DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
             }
@@ -72,7 +76,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         Auth.auth().signIn(withEmail: email, password: password) { [weak self] authResult, error in
             guard let self = self else { return }
             if let user = authResult?.user {
-                DispatchQueue.main.async { self.auth_state_changed.emit(true, user.uid) }
+                let uid = user.uid
+                DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
             } else {
                 DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
             }
@@ -85,7 +90,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
             authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] auth, user in
                 guard let self = self else { return }
                 if let user = user {
-                    DispatchQueue.main.async { self.auth_state_changed.emit(true, user.uid) }
+                    let uid = user.uid
+                    DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
                 } else {
                     DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
                 }
@@ -141,7 +147,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         user.getIDTokenForcingRefresh(forceRefresh) { [weak self] token, error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.id_token_response.emit(requestId, "", error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.id_token_response.emit(requestId, "", errorDesc) }
             } else if let token = token {
                 DispatchQueue.main.async { self.id_token_response.emit(requestId, token, "") }
             } else {

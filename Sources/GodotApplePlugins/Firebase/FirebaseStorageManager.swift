@@ -28,13 +28,15 @@ class FirebaseStorageManager: RefCounted, @unchecked Sendable {
         storageRef.putFile(from: localFile, metadata: nil) { [weak self] metadata, error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.upload_failed.emit(storage_path, error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.upload_failed.emit(storage_path, errorDesc) }
                 return
             }
             storageRef.downloadURL { [weak self] (url, error) in
                 guard let self = self else { return }
                 if let downloadURL = url {
-                    DispatchQueue.main.async { self.upload_completed.emit(storage_path, downloadURL.absoluteString) }
+                    let urlString = downloadURL.absoluteString
+                    DispatchQueue.main.async { self.upload_completed.emit(storage_path, urlString) }
                 }
             }
         }
@@ -49,7 +51,8 @@ class FirebaseStorageManager: RefCounted, @unchecked Sendable {
         storageRef.write(toFile: localFile) { [weak self] url, error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.download_failed.emit(storage_path, error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.download_failed.emit(storage_path, errorDesc) }
             } else {
                 DispatchQueue.main.async { self.download_completed.emit(storage_path, local_path) }
             }
@@ -64,7 +67,8 @@ class FirebaseStorageManager: RefCounted, @unchecked Sendable {
         storageRef.delete { [weak self] error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.delete_failed.emit(storage_path, error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.delete_failed.emit(storage_path, errorDesc) }
             } else {
                 DispatchQueue.main.async { self.delete_completed.emit(storage_path) }
             }

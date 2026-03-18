@@ -30,7 +30,7 @@ enum FirebaseVariantConverter {
             guard let gArray = VariantArray(variant) else { return [] }
             var swiftArray: [Any] = []
             for i in 0..<Int(gArray.count) {
-                if let val = gArray[Int64(i)] {
+                if let val = gArray[i] {
                     swiftArray.append(variantToAny(val))
                 }
             }
@@ -42,7 +42,7 @@ enum FirebaseVariantConverter {
     }
     
     static func anyToVariant(_ value: Any) -> Variant {
-        if value is NSNull { return Variant(Int?.none) }
+        if value is NSNull { return .init() }
         if let intVal = value as? Int { return Variant(intVal) }
         if let doubleVal = value as? Double { return Variant(doubleVal) }
         if let boolVal = value as? Bool { return Variant(boolVal) }
