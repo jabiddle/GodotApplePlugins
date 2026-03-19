@@ -33,20 +33,38 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     @Callable
     func sign_in_with_google(idToken: String, accessToken: String) {
         let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: accessToken)
-        Auth.auth().signIn(with: credential) { [weak self] authResult, error in
-            guard let self = self else { return }
-            if let user = authResult?.user {
-                let uid = user.uid
-                DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
-            } else {
-                DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
-            }
-        }
+        handle_credential(credential: credential)
     }
     
     @Callable
     func sign_in_with_apple(idToken: String, rawNonce: String) {
         let credential = OAuthProvider.credential(providerID: .apple, idToken: idToken, rawNonce: rawNonce)
+        handle_credential(credential: credential)
+    }
+    
+    // Helper function to handle linking vs signing in
+    private func handle_credential(credential: AuthCredential) {
+        if let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
+            // Attempt to link the new credential to the anonymous account
+            currentUser.link(with: credential) { [weak self] authResult, error in
+                guard let self = self else { return }
+                
+                if let _ = error {
+                    // Linking failed (e.g., this Apple/Google account is already attached to another Firebase UID).
+                    // Fall back to a standard sign-in, which will switch them to that existing account.
+                    self.perform_standard_sign_in(credential: credential)
+                } else if let user = authResult?.user {
+                    let uid = user.uid
+                    DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
+                }
+            }
+        } else {
+            // No anonymous user to link to, perform standard sign in
+            perform_standard_sign_in(credential: credential)
+        }
+    }
+    
+    private func perform_standard_sign_in(credential: AuthCredential) {
         Auth.auth().signIn(with: credential) { [weak self] authResult, error in
             guard let self = self else { return }
             if let user = authResult?.user {
