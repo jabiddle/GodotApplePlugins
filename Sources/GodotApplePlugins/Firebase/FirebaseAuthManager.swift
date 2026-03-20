@@ -14,6 +14,7 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     
     @Signal("is_logged_in", "uid") var auth_state_changed: SignalWithArguments<Bool, String>
     @Signal("request_id", "token", "error") var id_token_response: SignalWithArguments<String, String, String>
+    @Signal("error_msg") var user_deleted: SignalWithArguments<String>
     
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     
@@ -154,6 +155,54 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
             }
         }
         return "anonymous"
+    }
+    
+    @Callable func get_linked_providers() -> Variant {
+        let gDict = VariantDictionary()
+        if let providerData = Auth.auth().currentUser?.providerData {
+            for userInfo in providerData {
+                let pid = userInfo.providerID.replacingOccurrences(of: ".com", with: "")
+                let email = userInfo.email ?? userInfo.displayName ?? "Linked Account"
+                gDict[Variant(pid)] = Variant(email)
+            }
+        }
+        return Variant(gDict)
+    }
+    
+    @Callable
+    func unlink_provider(provider: String) {
+        guard let user = Auth.auth().currentUser else { return }
+        
+        var providerId = provider
+        if !providerId.hasSuffix(".com") {
+            providerId += ".com"
+        }
+        
+        user.unlink(fromProvider: providerId) { [weak self] authResult, error in
+            guard let self = self else { return }
+            if let error = error {
+                print("Error unlinking provider: \(error.localizedDescription)")
+            } else if let user = authResult?.user {
+                let uid = user.uid
+                DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
+            }
+        }
+    }
+    
+    @Callable
+    func delete_current_user() {
+        Auth.auth().currentUser?.delete { [weak self] error in
+            guard let self = self else { return }
+            if let error = error {
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.user_deleted.emit(errorDesc) }
+            } else {
+                DispatchQueue.main.async { 
+                    self.user_deleted.emit("")
+                    self.auth_state_changed.emit(false, "")
+                }
+            }
+        }
     }
     
     @Callable
