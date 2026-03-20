@@ -60,6 +60,16 @@ class ASAuthorizationController: RefCounted, @unchecked Sendable {
     // The more specific version of it
     @Callable
     func signin_with_scopes(scopeStrings: VariantArray) {
+        _signin(scopeStrings: scopeStrings, nonce: nil)
+    }
+
+    // Overload to support Firebase nonce requirements
+    @Callable
+    func signin_with_scopes_and_nonce(scopeStrings: VariantArray, nonce: String) {
+        _signin(scopeStrings: scopeStrings, nonce: nonce)
+    }
+    
+    private func _signin(scopeStrings: VariantArray, nonce: String?) {
         var requestedScopes: [ASAuthorization.Scope] = []
         for vscope in scopeStrings {
             guard let scope = String(vscope) else { continue }
@@ -75,6 +85,10 @@ class ASAuthorizationController: RefCounted, @unchecked Sendable {
             let request = provider.createRequest()
             
             request.requestedScopes = requestedScopes
+            
+            if let nonce = nonce, !nonce.isEmpty {
+                request.nonce = nonce
+            }
             
             let controller = AuthenticationServices.ASAuthorizationController(authorizationRequests: [request])
             self.controller = controller

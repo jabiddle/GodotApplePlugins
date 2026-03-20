@@ -14,6 +14,7 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     
     @Signal("is_logged_in", "uid") var auth_state_changed: SignalWithArguments<Bool, String>
     @Signal("request_id", "token", "error") var id_token_response: SignalWithArguments<String, String, String>
+    @Signal("provider") var link_conflict: SignalWithArguments<String>
     @Signal("error_msg") var user_deleted: SignalWithArguments<String>
     
     private var authStateHandle: AuthStateDidChangeListenerHandle?
@@ -32,28 +33,34 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     }
     
     @Callable
-    func sign_in_with_google(idToken: String, accessToken: String) {
+    func sign_in_with_google(idToken: String, accessToken: String, forceSignIn: Bool) {
         let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: accessToken)
-        handle_credential(credential: credential)
+        handle_credential(credential: credential, forceSignIn: forceSignIn)
     }
     
     @Callable
-    func sign_in_with_apple(idToken: String, rawNonce: String) {
+    func sign_in_with_apple(idToken: String, rawNonce: String, forceSignIn: Bool) {
         let credential = OAuthProvider.credential(providerID: .apple, idToken: idToken, rawNonce: rawNonce)
-        handle_credential(credential: credential)
+        handle_credential(credential: credential, forceSignIn: forceSignIn)
     }
     
     // Helper function to handle linking vs signing in
-    private func handle_credential(credential: AuthCredential) {
-        if let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
+    private func handle_credential(credential: AuthCredential, forceSignIn: Bool) {
+        if !forceSignIn, let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
             // Attempt to link the new credential to the anonymous account
             currentUser.link(with: credential) { [weak self] authResult, error in
                 guard let self = self else { return }
                 
-                if let _ = error {
-                    // Linking failed (e.g., this Apple/Google account is already attached to another Firebase UID).
-                    // Fall back to a standard sign-in, which will switch them to that existing account.
-                    self.perform_standard_sign_in(credential: credential)
+                if let error = error {
+                    let nsError = error as NSError
+                    if nsError.domain == AuthErrorDomain && 
+                       (nsError.code == AuthErrorCode.credentialAlreadyInUse.rawValue ||
+                        nsError.code == AuthErrorCode.emailAlreadyInUse.rawValue) {
+                        DispatchQueue.main.async { self.link_conflict.emit(credential.provider) }
+                    } else {
+                        // Fall back to a standard sign-in for other errors
+                        self.perform_standard_sign_in(credential: credential)
+                    }
                 } else if let user = authResult?.user {
                     let uid = user.uid
                     DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
