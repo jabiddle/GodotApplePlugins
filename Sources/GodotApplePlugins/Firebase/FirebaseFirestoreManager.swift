@@ -14,9 +14,10 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     
     @Signal("collection", "document", "data") var document_read: SignalWithArguments<String, String, VariantDictionary>
     @Signal("collection", "document_id") var document_added: SignalWithArguments<String, String>
-    @Signal("collection", "documents") var collection_read: SignalWithArguments<String, VariantArray>
-    @Signal("collection", "document") var update_completed: SignalWithArguments<String, String>
-    @Signal("error") var document_error: SignalWithArguments<String>
+    @Signal("collection", "documents") var collection_read: SignalWithArguments<String, VariantDictionary>
+    @Signal("collection", "document") var document_written: SignalWithArguments<String, String>
+    @Signal("collection", "document") var document_deleted: SignalWithArguments<String, String>
+    @Signal("collection", "document", "error") var document_error: SignalWithArguments<String, String, String>
 
     @Callable
     func get_document(collection: String, document: String) {
@@ -31,28 +32,27 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                 DispatchQueue.main.async { self.document_read.emit(collection, document, gDict) }
             } else {
                 let errorDesc = error?.localizedDescription ?? "Unknown Firestore error"
-                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
+                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
             }
         }
     }
     
     @Callable
-    func get_collection(collection: String) {
+    func list_documents(collection: String) {
         let db = Firestore.firestore()
         db.collection(collection).getDocuments { [weak self] (querySnapshot, error) in
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
+                DispatchQueue.main.async { self.document_error.emit(collection, "", errorDesc) }
             } else if let querySnapshot = querySnapshot {
-                let results = VariantArray()
+                let results = VariantDictionary()
                 for documentSnap in querySnapshot.documents {
                     let gDict = VariantDictionary()
-                    gDict[Variant("id")] = Variant(documentSnap.documentID)
                     for (key, value) in documentSnap.data() {
                         gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
                     }
-                    results.append(Variant(gDict))
+                    results[Variant(documentSnap.documentID)] = Variant(gDict)
                 }
                 DispatchQueue.main.async { self.collection_read.emit(collection, results) }
             }
@@ -73,7 +73,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
+                DispatchQueue.main.async { self.document_error.emit(collection, "", errorDesc) }
             } else if let docId = ref?.documentID {
                 DispatchQueue.main.async { self.document_added.emit(collection, docId) }
             }
@@ -89,13 +89,13 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             }
         }
         let db = Firestore.firestore()
-        db.collection(collection).document(document).setData(props) { [weak self] error in
+        db.collection(collection).document(document).setData(props, merge: true) { [weak self] error in
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
+                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
             } else {
-                DispatchQueue.main.async { self.update_completed.emit(collection, document) }
+                DispatchQueue.main.async { self.document_written.emit(collection, document) }
             }
         }
     }
@@ -113,9 +113,23 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(errorDesc) }
+                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
             } else {
-                DispatchQueue.main.async { self.update_completed.emit(collection, document) }
+                DispatchQueue.main.async { self.document_written.emit(collection, document) }
+            }
+        }
+    }
+    
+    @Callable
+    func delete_document(collection: String, document: String) {
+        let db = Firestore.firestore()
+        db.collection(collection).document(document).delete() { [weak self] error in
+            guard let self = self else { return }
+            if let error = error {
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+            } else {
+                DispatchQueue.main.async { self.document_deleted.emit(collection, document) }
             }
         }
     }
