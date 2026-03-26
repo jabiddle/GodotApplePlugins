@@ -22,6 +22,12 @@ class GoogleSignInManager: RefCounted, @unchecked Sendable {
     @Signal("error") var sign_in_failed: SignalWithArguments<String>
     
     @Callable
+    func setup(client_id: String) {
+        let config = GIDConfiguration(clientID: client_id)
+        GIDSignIn.sharedInstance.configuration = config
+    }
+    
+    @Callable
     func sign_in() {
         DispatchQueue.main.async {
             #if os(iOS)

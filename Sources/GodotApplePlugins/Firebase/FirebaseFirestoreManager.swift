@@ -18,6 +18,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     @Signal("collection", "document") var document_written: SignalWithArguments<String, String>
     @Signal("collection", "document") var document_deleted: SignalWithArguments<String, String>
     @Signal("collection", "document", "error") var document_error: SignalWithArguments<String, String, String>
+    @Signal("collection", "document", "timestamp") var document_committed: SignalWithArguments<String, String, Int>
 
     @Callable
     func get_document(collection: String, document: String) {
@@ -116,6 +117,38 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                 DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
             } else {
                 DispatchQueue.main.async { self.document_written.emit(collection, document) }
+            }
+        }
+    }
+    
+    @Callable
+    func commit_document(collection: String, document: String, data: VariantDictionary, server_timestamp_fields: VariantArray) {
+        let db = Firestore.firestore()
+        let batch = db.batch()
+        let docRef = db.collection(collection).document(document)
+        
+        var props: [String: Any] = [:]
+        for key in data.keys() {
+            if let k = String(key) {
+                props[k] = FirebaseVariantConverter.variantToAny(data[key])
+            }
+        }
+        
+        for i in 0..<Int(server_timestamp_fields.count) {
+            if let fieldName = String(server_timestamp_fields[i]) {
+                props[fieldName] = FieldValue.serverTimestamp()
+            }
+        }
+        
+        batch.setData(props, forDocument: docRef, merge: true)
+        batch.commit { [weak self] error in
+            guard let self = self else { return }
+            if let error = error {
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+            } else {
+                let currentUnix = Int(Date().timeIntervalSince1970)
+                DispatchQueue.main.async { self.document_committed.emit(collection, document, currentUnix) }
             }
         }
     }
