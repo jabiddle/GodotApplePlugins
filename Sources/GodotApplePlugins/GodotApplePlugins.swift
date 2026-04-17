@@ -73,6 +73,8 @@ import SwiftGodotRuntime
         FirebaseStorageManager.self,
 
         GoogleSignInManager.self,
+
+        RevenueCatManager.self,
     ],
     enums: [
         AVAudioSession.CategoryOptions.self,
