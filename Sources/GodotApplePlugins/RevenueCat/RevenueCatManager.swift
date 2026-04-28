@@ -134,26 +134,26 @@ class RevenueCatManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             
             guard let product = products.first else {
-                DispatchQueue.main.async { self?.purchase_completed.emit(productId, "Product not found") }
+                DispatchQueue.main.async { self.purchase_completed.emit(productId, "Product not found") }
                 return
             }
             
             Purchases.shared.purchase(product: product) { (transaction, customerInfo, error, userCancelled) in
                 if userCancelled {
-                    DispatchQueue.main.async { self?.purchase_completed.emit(productId, "User cancelled") }
+                    DispatchQueue.main.async { self.purchase_completed.emit(productId, "User cancelled") }
                     return
                 }
                 
                 if let error = error {
-                    DispatchQueue.main.async { self?.purchase_completed.emit(productId, error.localizedDescription) }
+                    DispatchQueue.main.async { self.purchase_completed.emit(productId, error.localizedDescription) }
                     return
                 }
                 
                 if let info = customerInfo {
-                    let infoDict = self?.encodeCustomerInfo(info: info) ?? VariantDictionary()
+                    let infoDict = self.encodeCustomerInfo(info: info) ?? VariantDictionary()
                     DispatchQueue.main.async {
-                        self?.customer_info_updated.emit(infoDict)
-                        self?.purchase_completed.emit(productId, "")
+                        self.customer_info_updated.emit(infoDict)
+                        self.purchase_completed.emit(productId, "")
                     }
                 }
             }
