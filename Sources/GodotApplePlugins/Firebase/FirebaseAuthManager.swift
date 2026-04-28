@@ -179,17 +179,16 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     @Callable
     func unlink_provider(provider: String) {
         guard let user = Auth.auth().currentUser else { return }
-        
         var providerId = provider
         if !providerId.hasSuffix(".com") {
             providerId += ".com"
         }
-        
-        user.unlink(fromProvider: providerId) { [weak self] authResult, error in
+        // Note the change from 'authResult' to 'unlinkedUser'
+        user.unlink(fromProvider: providerId) { [weak self] unlinkedUser, error in
             guard let self = self else { return }
             if let error = error {
                 print("Error unlinking provider: \(error.localizedDescription)")
-            } else if let user = authResult?.user {
+            } else if let user = unlinkedUser {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
             }
