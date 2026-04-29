@@ -171,8 +171,10 @@ with open(log_path, 'r') as f:
     for line in f:
         # Match target arch dynamically, removing SwiftSyntax
         if ('/clang' in line or '/swiftc' in line) and f'-target {arch}-' in line and f'/{framework}' in line and '-filelist' in line:
-            target_cmd = line.strip()
-            break
+            # Ensure we are grabbing the final dynamic link command, not the pre-link phase
+            if '-emit-library' in line or '-dynamiclib' in line:
+                target_cmd = line.strip()
+                break
 
 if target_cmd:
     with open(cache_path, 'w') as f:

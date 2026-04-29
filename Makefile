@@ -25,7 +25,8 @@ pre-build:
 
 build-ios:
 	@echo "Building for iOS..."
-	set -e; \
+	mkdir -p "$(DERIVED_DATA)-ios"
+	set -e; set -o pipefail; \
 	for framework in $(FRAMEWORK_NAMES); do \
 		$(XCODEBUILD) \
 			-workspace '$(WORKSPACE)' \
@@ -59,7 +60,8 @@ build-ios:
 
 build-macos:
 	@echo "Building for macOS Universal..."
-	set -e; \
+	mkdir -p "$(DERIVED_DATA)-macos"
+	set -e; set -o pipefail; \
 	for framework in $(FRAMEWORK_NAMES); do \
 		$(XCODEBUILD) \
 			-workspace '$(WORKSPACE)' \
