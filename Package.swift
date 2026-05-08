@@ -34,9 +34,7 @@ let package = Package(
         //.package(path: "../SwiftGodot")
 
         .package(url: "https://github.com/firebase/firebase-ios-sdk.git", .upToNextMajor(from: "11.0.0")),
-        .package(url: "https://github.com/google/GoogleSignIn-iOS.git", .upToNextMajor(from: "7.0.0")),
-
-        .package(url: "https://github.com/RevenueCat/purchases-ios-spm.git", .upToNextMajor(from: "5.0.0"))
+        .package(url: "https://github.com/google/GoogleSignIn-iOS.git", .upToNextMajor(from: "7.0.0"))
     ],
     targets: [
         .target(
@@ -50,8 +48,7 @@ let package = Package(
                 .product(name: "FirebaseFunctions", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseAnalytics", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseCrashlytics", package: "firebase-ios-sdk"),
-                .product(name: "FirebaseStorage", package: "firebase-ios-sdk"),
-                .product(name: "RevenueCat", package: "purchases-ios-spm")
+                .product(name: "FirebaseStorage", package: "firebase-ios-sdk")
             ],
             exclude: [
                 "GameCenter/GameCenterGuide.md",
