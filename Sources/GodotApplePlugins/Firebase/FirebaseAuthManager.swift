@@ -16,6 +16,7 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     @Signal("request_id", "token", "error") var id_token_response: SignalWithArguments<String, String, String>
     @Signal("provider") var link_conflict: SignalWithArguments<String>
     @Signal("error_msg") var user_deleted: SignalWithArguments<String>
+    @Signal("operation", "error_msg") var auth_request_error: SignalWithArguments<String, String>
     
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     
@@ -23,11 +24,11 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     func sign_in_anonymously() {
         Auth.auth().signInAnonymously { [weak self] authResult, error in
             guard let self = self else { return }
-            if let user = authResult?.user {
+            if let error = error {
+                DispatchQueue.main.async { self.auth_request_error.emit("sign_in_anonymously", error.localizedDescription) }
+            } else if let user = authResult?.user {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
-            } else {
-                DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
             }
         }
     }
@@ -75,11 +76,11 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     private func perform_standard_sign_in(credential: AuthCredential) {
         Auth.auth().signIn(with: credential) { [weak self] authResult, error in
             guard let self = self else { return }
-            if let user = authResult?.user {
+            if let error = error {
+                DispatchQueue.main.async { self.auth_request_error.emit("idp_sign_in", error.localizedDescription) }
+            } else if let user = authResult?.user {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
-            } else {
-                DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
             }
         }
     }
@@ -88,11 +89,11 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     func create_user_with_email_and_password(email: String, password: String) {
         Auth.auth().createUser(withEmail: email, password: password) { [weak self] authResult, error in
             guard let self = self else { return }
-            if let user = authResult?.user {
+            if let error = error {
+                DispatchQueue.main.async { self.auth_request_error.emit("email_auth", error.localizedDescription) }
+            } else if let user = authResult?.user {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
-            } else {
-                DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
             }
         }
     }
@@ -101,11 +102,11 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     func sign_in_with_email_and_password(email: String, password: String) {
         Auth.auth().signIn(withEmail: email, password: password) { [weak self] authResult, error in
             guard let self = self else { return }
-            if let user = authResult?.user {
+            if let error = error {
+                DispatchQueue.main.async { self.auth_request_error.emit("email_auth", error.localizedDescription) }
+            } else if let user = authResult?.user {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
-            } else {
-                DispatchQueue.main.async { self.auth_state_changed.emit(false, "") }
             }
         }
     }
@@ -188,6 +189,7 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 print("Error unlinking provider: \(error.localizedDescription)")
+                DispatchQueue.main.async { self.auth_request_error.emit("unlink_provider", error.localizedDescription) }
             } else if let user = unlinkedUser {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }

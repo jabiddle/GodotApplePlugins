@@ -31,9 +31,11 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                     gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
                 }
                 DispatchQueue.main.async { self.document_read.emit(collection, document, gDict) }
-            } else {
-                let errorDesc = error?.localizedDescription ?? "Unknown Firestore error"
+            } else if let error = error {
+                let errorDesc = error.localizedDescription
                 DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+            } else {
+                DispatchQueue.main.async { self.document_read.emit(collection, document, VariantDictionary()) }
             }
         }
     }
