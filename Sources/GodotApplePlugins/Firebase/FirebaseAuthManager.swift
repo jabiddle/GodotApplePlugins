@@ -26,7 +26,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         Auth.auth().signInAnonymously { [weak self] authResult, error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.auth_request_error.emit("sign_in_anonymously", error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.auth_request_error.emit("sign_in_anonymously", errorDesc) }
             } else if let user = authResult?.user {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
@@ -98,7 +99,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         Auth.auth().createUser(withEmail: email, password: password) { [weak self] authResult, error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.auth_request_error.emit("email_auth", error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.auth_request_error.emit("email_auth", errorDesc) }
             } else if let user = authResult?.user {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
@@ -111,7 +113,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         Auth.auth().signIn(withEmail: email, password: password) { [weak self] authResult, error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.auth_request_error.emit("email_auth", error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.auth_request_error.emit("email_auth", errorDesc) }
             } else if let user = authResult?.user {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }
@@ -196,8 +199,9 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         user.unlink(fromProvider: providerId) { [weak self] unlinkedUser, error in
             guard let self = self else { return }
             if let error = error {
-                print("Error unlinking provider: \(error.localizedDescription)")
-                DispatchQueue.main.async { self.auth_request_error.emit("unlink_provider", error.localizedDescription) }
+                let errorDesc = error.localizedDescription
+                print("Error unlinking provider: \(errorDesc)")
+                DispatchQueue.main.async { self.auth_request_error.emit("unlink_provider", errorDesc) }
             } else if let user = unlinkedUser {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }

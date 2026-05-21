@@ -19,13 +19,21 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     @Signal("collection", "document") var document_deleted: SignalWithArguments<String, String>
     @Signal("collection", "document", "error") var document_error: SignalWithArguments<String, String, String>
     @Signal("collection", "document") var document_committed: SignalWithArguments<String, String>
+    @Signal("collection", "document", "data") var document_snapshot: SignalWithArguments<String, String, VariantDictionary>
+    @Signal("collection", "data") var collection_snapshot: SignalWithArguments<String, VariantDictionary>
+
+    private var activeListeners: [String: ListenerRegistration] = [:]
 
     @Callable
     func get_document(collection: String, document: String) {
         let db = Firestore.firestore()
         db.collection(collection).document(document).getDocument { [weak self] (documentSnap, error) in
             guard let self = self else { return }
-            if let documentSnap = documentSnap, documentSnap.exists, let data = documentSnap.data() {
+            if let error = error {
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+            } else if let documentSnap = documentSnap, documentSnap.exists {
+                let data = documentSnap.data() ?? [:]
                 let gDict = VariantDictionary()
                 for (key, value) in data {
                     gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
@@ -166,5 +174,73 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                 DispatchQueue.main.async { self.document_deleted.emit(collection, document) }
             }
         }
+    }
+    
+    @Callable
+    func listen_to_document(collection: String, document: String) -> String {
+        let listenerId = UUID().uuidString
+        let db = Firestore.firestore()
+        let listener = db.collection(collection).document(document).addSnapshotListener { [weak self] (documentSnapshot, error) in
+            guard let self = self else { return }
+            if let error = error {
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+                return
+            }
+            if let documentSnapshot = documentSnapshot, documentSnapshot.exists, let data = documentSnapshot.data() {
+                let gDict = VariantDictionary()
+                for (key, value) in data {
+                    gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
+                }
+                DispatchQueue.main.async { self.document_snapshot.emit(collection, document, gDict) }
+            } else {
+                DispatchQueue.main.async { self.document_snapshot.emit(collection, document, VariantDictionary()) }
+            }
+        }
+        activeListeners[listenerId] = listener
+        return listenerId
+    }
+    
+    @Callable
+    func listen_to_collection(collection: String) -> String {
+        let listenerId = UUID().uuidString
+        let db = Firestore.firestore()
+        let listener = db.collection(collection).addSnapshotListener { [weak self] (querySnapshot, error) in
+            guard let self = self else { return }
+            if let error = error {
+                let errorDesc = error.localizedDescription
+                DispatchQueue.main.async { self.document_error.emit(collection, "", errorDesc) }
+                return
+            }
+            let results = VariantDictionary()
+            if let querySnapshot = querySnapshot {
+                for documentSnap in querySnapshot.documents {
+                    let gDict = VariantDictionary()
+                    for (key, value) in documentSnap.data() {
+                        gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
+                    }
+                    results[Variant(documentSnap.documentID)] = Variant(gDict)
+                }
+            }
+            DispatchQueue.main.async { self.collection_snapshot.emit(collection, results) }
+        }
+        activeListeners[listenerId] = listener
+        return listenerId
+    }
+    
+    @Callable
+    func stop_listening(listenerId: String) {
+        if let listener = activeListeners[listenerId] {
+            listener.remove()
+            activeListeners.removeValue(forKey: listenerId)
+        }
+    }
+    
+    @Callable
+    func stop_all_listeners() {
+        for (_, listener) in activeListeners {
+            listener.remove()
+        }
+        activeListeners.removeAll()
     }
 }

@@ -13,9 +13,16 @@ class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
     @Signal("name", "result") var function_result: SignalWithArguments<String, Variant>
     @Signal("name", "error") var function_error: SignalWithArguments<String, String>
     
+    private var region: String = ""
+    
+    @Callable
+    func setup(region: String) {
+        self.region = region
+    }
+    
     @Callable
     func call_function(name: String, parameters: VariantDictionary) {
-        lazy var functions = Functions.functions()
+        let functions = region.isEmpty ? Functions.functions() : Functions.functions(region: region)
         var props: [String: Any] = [:]
         for key in parameters.keys() {
             if let k = String(key) {
@@ -37,11 +44,11 @@ class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
                 if let vData = FirebaseVariantConverter.anyToVariant(data) {
                     DispatchQueue.main.async { self.function_result.emit(name, vData) }
                 } else {
-                    // Fallback to empty Variant if the conversion fails
-                    DispatchQueue.main.async { self.function_result.emit(name, Variant(VariantDictionary())) }
+                    // Fallback to null Variant if the conversion fails
+                    DispatchQueue.main.async { self.function_result.emit(name, Variant()) }
                 }
             } else {
-                DispatchQueue.main.async { self.function_result.emit(name, Variant(VariantDictionary())) }
+                DispatchQueue.main.async { self.function_result.emit(name, Variant()) }
             }
         }
     }
