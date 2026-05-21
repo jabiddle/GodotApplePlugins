@@ -17,6 +17,7 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     @Signal("provider") var link_conflict: SignalWithArguments<String>
     @Signal("error_msg") var user_deleted: SignalWithArguments<String>
     @Signal("operation", "error_msg") var auth_request_error: SignalWithArguments<String, String>
+    @Signal("provider") var user_not_found: SignalWithArguments<String>
     
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     
@@ -58,6 +59,8 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
                        (nsError.code == AuthErrorCode.credentialAlreadyInUse.rawValue ||
                         nsError.code == AuthErrorCode.emailAlreadyInUse.rawValue) {
                         DispatchQueue.main.async { self.link_conflict.emit(credential.provider) }
+                    } else if nsError.domain == AuthErrorDomain && nsError.code == AuthErrorCode.userNotFound.rawValue {
+                        DispatchQueue.main.async { self.user_not_found.emit(credential.provider) }
                     } else {
                         // Fall back to a standard sign-in for other errors
                         self.perform_standard_sign_in(credential: credential)
@@ -77,7 +80,12 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
         Auth.auth().signIn(with: credential) { [weak self] authResult, error in
             guard let self = self else { return }
             if let error = error {
-                DispatchQueue.main.async { self.auth_request_error.emit("idp_sign_in", error.localizedDescription) }
+                let nsError = error as NSError
+                if nsError.domain == AuthErrorDomain && nsError.code == AuthErrorCode.userNotFound.rawValue {
+                    DispatchQueue.main.async { self.user_not_found.emit(credential.provider) }
+                } else {
+                    DispatchQueue.main.async { self.auth_request_error.emit("idp_sign_in", error.localizedDescription) }
+                }
             } else if let user = authResult?.user {
                 let uid = user.uid
                 DispatchQueue.main.async { self.auth_state_changed.emit(true, uid) }

@@ -18,7 +18,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     @Signal("collection", "document") var document_written: SignalWithArguments<String, String>
     @Signal("collection", "document") var document_deleted: SignalWithArguments<String, String>
     @Signal("collection", "document", "error") var document_error: SignalWithArguments<String, String, String>
-    @Signal("collection", "document", "timestamp") var document_committed: SignalWithArguments<String, String, Int>
+    @Signal("collection", "document") var document_committed: SignalWithArguments<String, String>
 
     @Callable
     func get_document(collection: String, document: String) {
@@ -149,8 +149,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                 let errorDesc = error.localizedDescription
                 DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
             } else {
-                let currentUnix = Int(Date().timeIntervalSince1970)
-                DispatchQueue.main.async { self.document_committed.emit(collection, document, currentUnix) }
+                DispatchQueue.main.async { self.document_committed.emit(collection, document) }
             }
         }
     }
