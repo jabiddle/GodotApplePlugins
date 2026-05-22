@@ -10,7 +10,7 @@ import FirebaseFunctions
 @Godot
 class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
     
-    @Signal("name", "result") var function_result: SignalWithArguments<String, Variant>
+    @Signal("name", "result") var function_result: SignalWithArguments<String, Variant?>
     @Signal("name", "error") var function_error: SignalWithArguments<String, String>
     
     private var region: String = ""
@@ -41,14 +41,10 @@ class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
                 }
                 DispatchQueue.main.async { self.function_error.emit(name, errorDesc) }
             } else if let data = result?.data {
-                if let vData = FirebaseVariantConverter.anyToVariant(data) {
-                    DispatchQueue.main.async { self.function_result.emit(name, vData) }
-                } else {
-                    // Fallback to null Variant if the conversion fails
-                    DispatchQueue.main.async { self.function_result.emit(name, Variant()) }
-                }
+                let vData = FirebaseVariantConverter.anyToVariant(data)
+                DispatchQueue.main.async { self.function_result.emit(name, vData) }
             } else {
-                DispatchQueue.main.async { self.function_result.emit(name, Variant()) }
+                DispatchQueue.main.async { self.function_result.emit(name, nil) }
             }
         }
     }
