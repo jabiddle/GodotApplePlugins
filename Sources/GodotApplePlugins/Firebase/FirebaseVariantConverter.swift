@@ -46,8 +46,8 @@ enum FirebaseVariantConverter {
         }
     }
     
-    static func anyToVariant(_ value: Any) -> Variant {
-        if value is NSNull { return Variant(nil as GodotObject?) }
+    static func anyToVariant(_ value: Any) -> Variant? {
+        if value is NSNull { return nil } 
         if let intVal = value as? Int { return Variant(intVal) }
         if let doubleVal = value as? Double { return Variant(doubleVal) }
         if let boolVal = value as? Bool { return Variant(boolVal) }
@@ -72,7 +72,9 @@ enum FirebaseVariantConverter {
         if let arrayVal = value as? [Any] {
             let gArray = VariantArray()
             for v in arrayVal {
-                gArray.append(anyToVariant(v))
+                if let mappedVariant = anyToVariant(v) {
+                     gArray.append(mappedVariant)
+                }
             }
             return Variant(gArray)
         }
