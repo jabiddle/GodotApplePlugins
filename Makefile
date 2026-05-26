@@ -1,4 +1,4 @@
-.PHONY: run xcframework check_swiftsyntax build pre-build build-ios build-macos
+.PHONY: run xcframework check_swiftsyntax build pre-build build-ios build-macos build-windows build-linux
 
 # Allow overriding common build knobs.
 CONFIG ?= Release
@@ -9,6 +9,10 @@ FRAMEWORK_NAMES ?= GodotApplePlugins
 XCODEBUILD ?= xcodebuild
 XCODEBUILD_ARGS ?=
 
+# Zig cross-compilation for C stub
+LINUX_CC ?= zig cc -target x86_64-linux-gnu
+WINDOWS_CC ?= zig cc -target x86_64-windows-gnu
+
 # Firebase plist paths
 IOS_PLIST_PATH ?= $(CURDIR)/GoogleService-Info-iOS.plist
 MACOS_PLIST_PATH ?= $(CURDIR)/GoogleService-Info-macOS.plist
@@ -17,7 +21,7 @@ run:
 	@echo -e "Run make xcframework to produce the binary payloads for all platforms"
 
 # The master build target triggers the prerequisite and explicit platform targets
-build: pre-build build-ios build-macos
+build: pre-build build-ios build-macos build-windows build-linux
 
 pre-build:
 	@echo "Pre-building Swift Macros natively..."
@@ -52,7 +56,7 @@ build-ios:
 		elif [ ! -f "$(IOS_PLIST_PATH)" ]; then \
 			echo "GoogleService-Info-iOS.plist not found. Skipping dSYM upload."; \
 		elif [ -x "$$UPLOAD_TOOL" ] && [ -d "$$DSYM_DIR" ]; then \
-			"$$UPLOAD_TOOL" -g "$(IOS_PLIST_PATH)" -p ios "$$DSYM_DIR"; \
+			"$$UPLOAD_TOOL" -gsp "$(IOS_PLIST_PATH)" -p ios "$$DSYM_DIR"; \
 		else \
 			echo "Crashlytics upload tool or dSYM dir not found. Skipping."; \
 		fi; \
@@ -89,7 +93,7 @@ build-macos:
 		elif [ ! -f "$(MACOS_PLIST_PATH)" ]; then \
 			echo "GoogleService-Info-macOS.plist not found. Skipping dSYM upload."; \
 		elif [ -x "$$UPLOAD_TOOL" ] && [ -d "$$DSYM_DIR" ]; then \
-			"$$UPLOAD_TOOL" -g "$(MACOS_PLIST_PATH)" -p mac "$$DSYM_DIR"; \
+			"$$UPLOAD_TOOL" -gsp "$(MACOS_PLIST_PATH)" -p mac "$$DSYM_DIR"; \
 		else \
 			echo "Crashlytics upload tool or dSYM dir not found. Skipping."; \
 		fi; \
@@ -117,6 +121,20 @@ check_swiftsyntax:
 		check_one macosx "$(DERIVED_DATA)-macos/Build/Products/$(CONFIG)/PackageFrameworks/$$framework.framework/$$framework" "macOS Universal/$$framework"; \
 	done; \
 	test "$$failed" -eq 0
+
+build-windows:
+	@echo "Building stub for Windows using Zig..."
+	@config_lc=`echo $(CONFIG) | tr '[:upper:]' '[:lower:]'`; \
+	out_dir="$(CURDIR)/addons/GodotApplePlugins/bin/$$config_lc"; \
+	mkdir -p "$$out_dir"; \
+	$(WINDOWS_CC) -shared Sources/stub.c -o "$$out_dir/godot_apple_plugins.dll"
+
+build-linux:
+	@echo "Building stub for Linux using Zig..."
+	@config_lc=`echo $(CONFIG) | tr '[:upper:]' '[:lower:]'`; \
+	out_dir="$(CURDIR)/addons/GodotApplePlugins/bin/$$config_lc"; \
+	mkdir -p "$$out_dir"; \
+	$(LINUX_CC) -shared -fPIC Sources/stub.c -o "$$out_dir/libgodot_apple_plugins.so"
 
 package: build dist
 

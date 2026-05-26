@@ -5,9 +5,17 @@ compatibility_minimum = 4.4
 
 [libraries]
 ios.debug.arm64 = "./bin/debug/GodotApplePlugins.xcframework"
+ios.release.arm64 = "./bin/release/GodotApplePlugins.xcframework"
+
 macos.debug.arm64 = "./bin/debug/GodotApplePlugins.framework"
+macos.release.arm64 = "./bin/release/GodotApplePlugins.framework"
+
+macos.release.x86_64 = "./bin/release/GodotApplePlugins_x64.framework"
 macos.debug.x86_64 = "./bin/debug/GodotApplePlugins_x64.framework"
 
-ios.release.arm64 = "./bin/release/GodotApplePlugins.xcframework"
-macos.release.arm64 = "./bin/release/GodotApplePlugins.framework"
-macos.release.x86_64 = "./bin/release/GodotApplePlugins_x64.framework"
+# --- Stub Targets ---
+windows.debug.x86_64 = "./bin/debug/godot_apple_plugins.dll"
+windows.release.x86_64 = "./bin/release/godot_apple_plugins.dll"
+
+linux.debug.x86_64 = "./bin/debug/libgodot_apple_plugins.so"
+linux.release.x86_64 = "./bin/release/libgodot_apple_plugins.so"
