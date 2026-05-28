@@ -14,8 +14,10 @@ macos.release.x86_64 = "./bin/release/GodotApplePlugins_x64.framework"
 macos.debug.x86_64 = "./bin/debug/GodotApplePlugins_x64.framework"
 
 # --- Stub Targets ---
+windows.editor.x86_64 = "./bin/debug/godot_apple_plugins.dll"
 windows.debug.x86_64 = "./bin/debug/godot_apple_plugins.dll"
-windows.release.x86_64 = "./bin/release/godot_apple_plugins.dll"
+windows.release.x86_64 = "./bin/debug/godot_apple_plugins.dll"
 
+linux.editor.x86_64 = "./bin/debug/libgodot_apple_plugins.so"
 linux.debug.x86_64 = "./bin/debug/libgodot_apple_plugins.so"
-linux.release.x86_64 = "./bin/release/libgodot_apple_plugins.so"
+linux.release.x86_64 = "./bin/debug/libgodot_apple_plugins.so"
