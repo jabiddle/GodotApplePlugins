@@ -1,5 +1,5 @@
-import Foundation
 #if canImport(ActivityKit)
+import Foundation
 import ActivityKit
 
 public struct GenericLiveActivityAttributes: ActivityAttributes {
