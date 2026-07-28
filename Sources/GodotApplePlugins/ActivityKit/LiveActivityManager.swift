@@ -1,6 +1,7 @@
-#if os(iOS)
 import Foundation
+#if os(iOS)
 import ActivityKit
+#endif
 @preconcurrency import SwiftGodotRuntime
 
 @Godot
@@ -12,6 +13,7 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
 
     @Callable
     func start_activity(attributesJson: String, stateJson: String) -> Variant? {
+#if os(iOS)
         if #available(iOS 16.1, *) {
             guard ActivityAuthorizationInfo().areActivitiesEnabled else {
                 return Variant("Live Activities are not enabled.")
@@ -40,11 +42,13 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
                 return Variant(error.localizedDescription)
             }
         }
+#endif
         return Variant("ActivityKit not available.")
     }
 
     @Callable
     func update_activity(stateJson: String) {
+#if os(iOS)
         if #available(iOS 16.1, *) {
             Task {
                 for activity in Activity<GenericLiveActivityAttributes>.activities {
@@ -59,10 +63,12 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
                 }
             }
         }
+#endif
     }
 
     @Callable
     func end_activity(stateJson: String) {
+#if os(iOS)
         if #available(iOS 16.1, *) {
             Task {
                 for activity in Activity<GenericLiveActivityAttributes>.activities {
@@ -77,6 +83,6 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
                 }
             }
         }
+#endif
     }
 }
-#endif

@@ -74,9 +74,7 @@ import SwiftGodotRuntime
 
         GoogleSignInManager.self,
         
-#if os(iOS)
         LiveActivityManager.self,
-#endif
     ],
     enums: [
         AVAudioSession.CategoryOptions.self,
