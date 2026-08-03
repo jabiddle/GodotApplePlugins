@@ -8,16 +8,16 @@ import AppKit
 @Godot
 class DeepLinkManager: RefCounted, @unchecked Sendable {
     
-    #signal("quick_action_received", arguments: ["type": String.self])
-    #signal("universal_link_received", arguments: ["url": String.self])
-    #signal("custom_url_received", arguments: ["url": String.self])
+    @Signal var quickActionReceived: SignalWithArguments<String>
+    @Signal var universalLinkReceived: SignalWithArguments<String>
+    @Signal var customUrlReceived: SignalWithArguments<String>
     
-    static var shared: DeepLinkManager?
+    nonisolated(unsafe) static var shared: DeepLinkManager?
     
     // Store pending actions for cold launches before GDScript connects to the signals
-    static var pendingQuickAction: String?
-    static var pendingUniversalLink: String?
-    static var pendingCustomURL: String?
+    nonisolated(unsafe) static var pendingQuickAction: String?
+    nonisolated(unsafe) static var pendingUniversalLink: String?
+    nonisolated(unsafe) static var pendingCustomURL: String?
     
     required init(_ context: InitContext) {
         super.init(context)
@@ -26,20 +26,22 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
     }
     
     static func swizzleAppDelegate() {
+        Task { @MainActor in
 #if os(iOS)
-        guard let delegate = UIApplication.shared.delegate else { return }
-        let delegateClass: AnyClass = object_getClass(delegate)!
-        
-        swizzleQuickActions(delegateClass: delegateClass)
-        swizzleUniversalLinks(delegateClass: delegateClass)
-        swizzleCustomURLSchemes(delegateClass: delegateClass)
+            guard let delegate = UIApplication.shared.delegate else { return }
+            let delegateClass: AnyClass = object_getClass(delegate)!
+            
+            swizzleQuickActions(delegateClass: delegateClass)
+            swizzleUniversalLinks(delegateClass: delegateClass)
+            swizzleCustomURLSchemes(delegateClass: delegateClass)
 #elseif os(macOS)
-        guard let delegate = NSApplication.shared.delegate else { return }
-        let delegateClass: AnyClass = object_getClass(delegate)!
-        
-        swizzleUniversalLinks(delegateClass: delegateClass)
-        swizzleCustomURLSchemes(delegateClass: delegateClass)
+            guard let delegate = NSApplication.shared.delegate else { return }
+            let delegateClass: AnyClass = object_getClass(delegate)!
+            
+            swizzleUniversalLinks(delegateClass: delegateClass)
+            swizzleCustomURLSchemes(delegateClass: delegateClass)
 #endif
+        }
     }
     
     // MARK: - Quick Actions
@@ -293,7 +295,7 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
     
     static func handleQuickAction(_ type: String) {
         if let shared = shared {
-            shared.emit(signal: DeepLinkManager.quickActionReceived, type)
+            shared.quickActionReceived.emit(type)
         } else {
             pendingQuickAction = type
         }
@@ -301,7 +303,7 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
     
     static func handleUniversalLink(_ url: String) {
         if let shared = shared {
-            shared.emit(signal: DeepLinkManager.universalLinkReceived, url)
+            shared.universalLinkReceived.emit(url)
         } else {
             pendingUniversalLink = url
         }
@@ -309,7 +311,7 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
     
     static func handleCustomURL(_ url: String) {
         if let shared = shared {
-            shared.emit(signal: DeepLinkManager.customUrlReceived, url)
+            shared.customUrlReceived.emit(url)
         } else {
             pendingCustomURL = url
         }
