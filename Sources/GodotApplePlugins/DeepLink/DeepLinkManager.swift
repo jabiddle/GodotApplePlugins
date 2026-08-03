@@ -6,12 +6,14 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
     
     #signal("quick_action_received", arguments: ["type": String.self])
     #signal("universal_link_received", arguments: ["url": String.self])
+    #signal("custom_url_received", arguments: ["url": String.self])
     
     static var shared: DeepLinkManager?
     
     // Store pending actions for cold launches before GDScript connects to the signals
     static var pendingQuickAction: String?
     static var pendingUniversalLink: String?
+    static var pendingCustomURL: String?
     
     required init(_ context: InitContext) {
         super.init(context)
@@ -25,6 +27,7 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
         
         swizzleQuickActions(delegateClass: delegateClass)
         swizzleUniversalLinks(delegateClass: delegateClass)
+        swizzleCustomURLSchemes(delegateClass: delegateClass)
     }
     
     // MARK: - Quick Actions
@@ -95,6 +98,38 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
         }
     }
     
+    // MARK: - Custom URL Schemes
+    
+    private static func swizzleCustomURLSchemes(delegateClass: AnyClass) {
+        let originalSelector = #selector(UIApplicationDelegate.application(_:open:options:))
+        let originalMethod = class_getInstanceMethod(delegateClass, originalSelector)
+        
+        typealias OpenURLBlock = @convention(block) (AnyObject, UIApplication, URL, [UIApplication.OpenURLOptionsKey : Any]) -> Bool
+        
+        let block: OpenURLBlock = { (sself, app, url, options) in
+            DeepLinkManager.handleCustomURL(url.absoluteString)
+            
+            if let origMethod = originalMethod {
+                typealias OriginalFunction = @convention(c) (AnyObject, Selector, UIApplication, URL, [UIApplication.OpenURLOptionsKey : Any]) -> Bool
+                let imp = method_getImplementation(origMethod)
+                let originalCallable = unsafeBitCast(imp, to: OriginalFunction.self)
+                let originalResult = originalCallable(sself, originalSelector, app, url, options)
+                return originalResult || true
+            }
+            
+            return true
+        }
+        
+        let newImp = imp_implementationWithBlock(block)
+        
+        if let origMethod = originalMethod {
+            method_setImplementation(origMethod, newImp)
+        } else {
+            let types = "c@:@@@" // char (BOOL) return, self, cmd, app, url, options
+            class_addMethod(delegateClass, originalSelector, newImp, types)
+        }
+    }
+    
     // MARK: - GDScript API
     
     @Callable
@@ -111,6 +146,63 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
         return link
     }
     
+    @Callable
+    func check_pending_custom_url() -> String {
+        let link = Self.pendingCustomURL ?? ""
+        Self.pendingCustomURL = nil
+        return link
+    }
+    
+    @Callable
+    func set_quick_actions(jsonArray: String) {
+        guard let data = jsonArray.data(using: .utf8),
+              let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { return }
+        
+        let shortcutItems: [UIApplicationShortcutItem] = items.compactMap { dict in
+            guard let id = dict["id"] as? String, !id.isEmpty,
+                  let title = dict["title"] as? String, !title.isEmpty
+            else { return nil }
+            
+            let subtitle = dict["subtitle"] as? String
+            let iconKey = dict["icon"] as? String ?? ""
+            let sfIcon = dict["sf_icon"] as? String ?? ""
+            let icon = Self.resolveShortcutIcon(iconKey: iconKey, sfIcon: sfIcon)
+            
+            return UIApplicationShortcutItem(
+                type: id,
+                localizedTitle: title,
+                localizedSubtitle: subtitle?.isEmpty == false ? subtitle : nil,
+                icon: icon,
+                userInfo: nil
+            )
+        }
+        
+        // UIApplication must be accessed on the main thread.
+        DispatchQueue.main.async {
+            UIApplication.shared.shortcutItems = shortcutItems
+        }
+    }
+    
+    /// Maps a platform-agnostic icon key string from GDScript to a native
+    /// `UIApplicationShortcutIcon`. Prioritizes a custom bundled asset if available,
+    /// and falls back to an Apple SF Symbol (`sfIcon`) if the custom asset is missing.
+    private static func resolveShortcutIcon(iconKey: String, sfIcon: String) -> UIApplicationShortcutIcon? {
+        // Check if the custom asset actually exists in the iOS app bundle
+        if !iconKey.isEmpty, UIImage(named: iconKey) != nil {
+            return UIApplicationShortcutIcon(templateImageName: iconKey)
+        }
+        
+        // Fall back to Apple SF Symbol
+        if !sfIcon.isEmpty {
+            if #available(iOS 13.0, *) {
+                return UIApplicationShortcutIcon(systemImageName: sfIcon)
+            }
+        }
+        
+        return nil
+    }
+    
     static func handleQuickAction(_ type: String) {
         if let shared = shared {
             shared.emit(signal: DeepLinkManager.quickActionReceived, type)
@@ -124,6 +216,14 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
             shared.emit(signal: DeepLinkManager.universalLinkReceived, url)
         } else {
             pendingUniversalLink = url
+        }
+    }
+    
+    static func handleCustomURL(_ url: String) {
+        if let shared = shared {
+            shared.emit(signal: DeepLinkManager.customUrlReceived, url)
+        } else {
+            pendingCustomURL = url
         }
     }
 }
