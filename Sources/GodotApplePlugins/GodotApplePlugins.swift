@@ -75,6 +75,7 @@ import SwiftGodotRuntime
         GoogleSignInManager.self,
         
         LiveActivityManager.self,
+        DeepLinkManager.self,
     ],
     enums: [
         AVAudioSession.CategoryOptions.self,
