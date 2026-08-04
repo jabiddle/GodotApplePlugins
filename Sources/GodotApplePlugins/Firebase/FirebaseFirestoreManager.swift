@@ -12,50 +12,57 @@ import FirebaseFirestore
 @Godot
 class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     
-    @Signal("collection", "document", "data") var document_read: SignalWithArguments<String, String, VariantDictionary>
-    @Signal("collection", "document_id") var document_added: SignalWithArguments<String, String>
-    @Signal("collection", "documents") var collection_read: SignalWithArguments<String, VariantDictionary>
-    @Signal("collection", "document") var document_written: SignalWithArguments<String, String>
-    @Signal("collection", "document") var document_deleted: SignalWithArguments<String, String>
-    @Signal("collection", "document", "error") var document_error: SignalWithArguments<String, String, String>
-    @Signal("collection", "document") var document_committed: SignalWithArguments<String, String>
+    @Signal("collection", "document", "error_msg") var document_error: SignalWithArguments<String, String, String>
     @Signal("collection", "document", "data") var document_snapshot: SignalWithArguments<String, String, VariantDictionary>
     @Signal("collection", "data") var collection_snapshot: SignalWithArguments<String, VariantDictionary>
 
     private var activeListeners: [String: ListenerRegistration] = [:]
 
     @Callable
-    func get_document(collection: String, document: String) {
+    func get_document(collection: String, document: String, callback: Callable) {
         let db = Firestore.firestore()
         db.collection(collection).document(document).getDocument { [weak self] (documentSnap, error) in
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+                DispatchQueue.main.async {
+                    self.document_error.emit(collection, document, errorDesc)
+                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
+                }
             } else if let documentSnap = documentSnap, documentSnap.exists {
                 let data = documentSnap.data() ?? [:]
                 let gDict = VariantDictionary()
                 for (key, value) in data {
                     gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
                 }
-                DispatchQueue.main.async { self.document_read.emit(collection, document, gDict) }
+                DispatchQueue.main.async {
+                    let _ = callback.call(Variant(true), Variant(document), Variant(gDict), Variant(""))
+                }
             } else if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+                DispatchQueue.main.async {
+                    self.document_error.emit(collection, document, errorDesc)
+                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
+                }
             } else {
-                DispatchQueue.main.async { self.document_read.emit(collection, document, VariantDictionary()) }
+                DispatchQueue.main.async {
+                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
+                }
             }
         }
     }
     
     @Callable
-    func list_documents(collection: String) {
+    func list_documents(collection: String, callback: Callable) {
         let db = Firestore.firestore()
         db.collection(collection).getDocuments { [weak self] (querySnapshot, error) in
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, "", errorDesc) }
+                DispatchQueue.main.async {
+                    self.document_error.emit(collection, "", errorDesc)
+                    let _ = callback.call(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
+                }
             } else if let querySnapshot = querySnapshot {
                 let results = VariantDictionary()
                 for documentSnap in querySnapshot.documents {
@@ -65,13 +72,15 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                     }
                     results[Variant(documentSnap.documentID)] = Variant(gDict)
                 }
-                DispatchQueue.main.async { self.collection_read.emit(collection, results) }
+                DispatchQueue.main.async {
+                    let _ = callback.call(Variant(true), Variant(""), Variant(results), Variant(""))
+                }
             }
         }
     }
     
     @Callable
-    func add_document(collection: String, data: VariantDictionary) {
+    func add_document(collection: String, data: VariantDictionary, callback: Callable) {
         var props: [String: Any] = [:]
         for key in data.keys() {
             let k = FirebaseVariantConverter.stringifyKey(key)
@@ -88,15 +97,20 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, "", errorDesc) }
+                DispatchQueue.main.async {
+                    self.document_error.emit(collection, "", errorDesc)
+                    let _ = callback.call(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
+                }
             } else if let docId = ref?.documentID {
-                DispatchQueue.main.async { self.document_added.emit(collection, docId) }
+                DispatchQueue.main.async {
+                    let _ = callback.call(Variant(true), Variant(docId), Variant(VariantDictionary()), Variant(""))
+                }
             }
         }
     }
     
     @Callable
-    func set_document(collection: String, document: String, data: VariantDictionary) {
+    func set_document(collection: String, document: String, data: VariantDictionary, callback: Callable) {
         var props: [String: Any] = [:]
         for key in data.keys() {
             let k = FirebaseVariantConverter.stringifyKey(key)
@@ -112,15 +126,20 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+                DispatchQueue.main.async {
+                    self.document_error.emit(collection, document, errorDesc)
+                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
+                }
             } else {
-                DispatchQueue.main.async { self.document_written.emit(collection, document) }
+                DispatchQueue.main.async {
+                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
+                }
             }
         }
     }
     
     @Callable
-    func update_document(collection: String, document: String, data: VariantDictionary) {
+    func update_document(collection: String, document: String, data: VariantDictionary, callback: Callable) {
         var props: [String: Any] = [:]
         for key in data.keys() {
             let k = FirebaseVariantConverter.stringifyKey(key)
@@ -136,15 +155,20 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+                DispatchQueue.main.async {
+                    self.document_error.emit(collection, document, errorDesc)
+                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
+                }
             } else {
-                DispatchQueue.main.async { self.document_written.emit(collection, document) }
+                DispatchQueue.main.async {
+                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
+                }
             }
         }
     }
     
     @Callable
-    func commit_document(collection: String, document: String, data: VariantDictionary, server_timestamp_fields: VariantArray) {
+    func commit_document(collection: String, document: String, data: VariantDictionary, server_timestamp_fields: VariantArray, callback: Callable) {
         let db = Firestore.firestore()
         let batch = db.batch()
         let docRef = db.collection(collection).document(document)
@@ -171,23 +195,33 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+                DispatchQueue.main.async {
+                    self.document_error.emit(collection, document, errorDesc)
+                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
+                }
             } else {
-                DispatchQueue.main.async { self.document_committed.emit(collection, document) }
+                DispatchQueue.main.async {
+                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
+                }
             }
         }
     }
     
     @Callable
-    func delete_document(collection: String, document: String) {
+    func delete_document(collection: String, document: String, callback: Callable) {
         let db = Firestore.firestore()
         db.collection(collection).document(document).delete() { [weak self] error in
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+                DispatchQueue.main.async {
+                    self.document_error.emit(collection, document, errorDesc)
+                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
+                }
             } else {
-                DispatchQueue.main.async { self.document_deleted.emit(collection, document) }
+                DispatchQueue.main.async {
+                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
+                }
             }
         }
     }
