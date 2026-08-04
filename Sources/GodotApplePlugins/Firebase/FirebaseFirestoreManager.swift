@@ -74,13 +74,12 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func add_document(collection: String, data: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in data.keys() {
-            if let k = String(key) {
-                let val = FirebaseVariantConverter.variantToAny(data[key])
-                if let strVal = val as? String, strVal == "FIREBASE_DELETE_FIELD" {
-                    props[k] = FieldValue.delete()
-                } else {
-                    props[k] = val
-                }
+            let k = FirebaseVariantConverter.stringifyKey(key)
+            let val = FirebaseVariantConverter.variantToAny(data[key])
+            if let strVal = val as? String, strVal == "FIREBASE_DELETE_FIELD" {
+                props[k] = FieldValue.delete()
+            } else {
+                props[k] = val
             }
         }
         let db = Firestore.firestore()
@@ -100,13 +99,12 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func set_document(collection: String, document: String, data: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in data.keys() {
-            if let k = String(key) {
-                let val = FirebaseVariantConverter.variantToAny(data[key])
-                if let strVal = val as? String, strVal == "FIREBASE_DELETE_FIELD" {
-                    props[k] = FieldValue.delete()
-                } else {
-                    props[k] = val
-                }
+            let k = FirebaseVariantConverter.stringifyKey(key)
+            let val = FirebaseVariantConverter.variantToAny(data[key])
+            if let strVal = val as? String, strVal == "FIREBASE_DELETE_FIELD" {
+                props[k] = FieldValue.delete()
+            } else {
+                props[k] = val
             }
         }
         let db = Firestore.firestore()
@@ -125,13 +123,12 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func update_document(collection: String, document: String, data: VariantDictionary) {
         var props: [String: Any] = [:]
         for key in data.keys() {
-            if let k = String(key) {
-                let val = FirebaseVariantConverter.variantToAny(data[key])
-                if let strVal = val as? String, strVal == "FIREBASE_DELETE_FIELD" {
-                    props[k] = FieldValue.delete()
-                } else {
-                    props[k] = val
-                }
+            let k = FirebaseVariantConverter.stringifyKey(key)
+            let val = FirebaseVariantConverter.variantToAny(data[key])
+            if let strVal = val as? String, strVal == "FIREBASE_DELETE_FIELD" {
+                props[k] = FieldValue.delete()
+            } else {
+                props[k] = val
             }
         }
         let db = Firestore.firestore()
@@ -154,13 +151,12 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
         
         var props: [String: Any] = [:]
         for key in data.keys() {
-            if let k = String(key) {
-                let val = FirebaseVariantConverter.variantToAny(data[key])
-                if let strVal = val as? String, strVal == "FIREBASE_DELETE_FIELD" {
-                    props[k] = FieldValue.delete()
-                } else {
-                    props[k] = val
-                }
+            let k = FirebaseVariantConverter.stringifyKey(key)
+            let val = FirebaseVariantConverter.variantToAny(data[key])
+            if let strVal = val as? String, strVal == "FIREBASE_DELETE_FIELD" {
+                props[k] = FieldValue.delete()
+            } else {
+                props[k] = val
             }
         }
         

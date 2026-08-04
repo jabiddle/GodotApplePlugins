@@ -23,9 +23,8 @@ enum FirebaseVariantConverter {
             var swiftDict: [String: Any] = [:]
             
             for key in gDict.keys() {
-                if let k = String(key) {
-                    swiftDict[k] = variantToAny(gDict[key])
-                }
+                let k = stringifyKey(key)
+                swiftDict[k] = variantToAny(gDict[key])
             }
             return swiftDict
             
@@ -47,7 +46,7 @@ enum FirebaseVariantConverter {
     }
     
     static func anyToVariant(_ value: Any) -> Variant? {
-        if value is NSNull { return nil } 
+        if value is NSNull { return nil }
         if let intVal = value as? Int { return Variant(intVal) }
         if let doubleVal = value as? Double { return Variant(doubleVal) }
         if let boolVal = value as? Bool { return Variant(boolVal) }
@@ -79,5 +78,14 @@ enum FirebaseVariantConverter {
             return Variant(gArray)
         }
         return Variant(String(describing: value))
+    }
+    
+    // Converts any Godot Variant key type to a String for use as a Swift dictionary key.
+    static func stringifyKey(_ key: Variant?) -> String {
+        guard let key = key else { return "null" }
+        if let strKey = String(key) { return strKey }
+        if let intKey = Int(key) { return String(intKey) }
+        if let doubleKey = Double(key) { return String(doubleKey) }
+        return key.description
     }
 }

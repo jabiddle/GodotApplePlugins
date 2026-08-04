@@ -25,9 +25,8 @@ class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
         let functions = region.isEmpty ? Functions.functions() : Functions.functions(region: region)
         var props: [String: Any] = [:]
         for key in parameters.keys() {
-            if let k = String(key) {
-                props[k] = FirebaseVariantConverter.variantToAny(parameters[key])
-            }
+            let k = FirebaseVariantConverter.stringifyKey(key)
+            props[k] = FirebaseVariantConverter.variantToAny(parameters[key])
         }
         functions.httpsCallable(name).call(props) { [weak self] result, error in
             guard let self = self else { return }
