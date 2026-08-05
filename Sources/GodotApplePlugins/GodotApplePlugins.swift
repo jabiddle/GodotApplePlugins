@@ -103,5 +103,12 @@ import SwiftGodotRuntime
         ASAuthorizationAppleIDCredential.UserDetectionStatus.self,
         ASAuthorizationAppleIDCredential.UserAgeRange.self,
     ],
-    registerDocs: true
+    registerDocs: true,
+    hookMethod: pluginSetupHook
 )
+
+public func pluginSetupHook(level: ExtensionInitializationLevel, isInit: Bool) {
+    if isInit && level == .core {
+        DeepLinkManager.setupEarly()
+    }
+}

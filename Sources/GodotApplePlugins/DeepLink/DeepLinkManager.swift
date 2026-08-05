@@ -22,26 +22,33 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
     required init(_ context: InitContext) {
         super.init(context)
         Self.shared = self
-        Self.swizzleAppDelegate()
     }
     
-    static func swizzleAppDelegate() {
-        Task { @MainActor in
+    static func setupEarly() {
 #if os(iOS)
-            guard let delegate = UIApplication.shared.delegate else { return }
-            let delegateClass: AnyClass = object_getClass(delegate)!
-            
-            swizzleQuickActions(delegateClass: delegateClass)
-            swizzleUniversalLinks(delegateClass: delegateClass)
-            swizzleCustomURLSchemes(delegateClass: delegateClass)
+        let delegateClass: AnyClass? = {
+            if let delegate = UIApplication.shared.delegate {
+                return object_getClass(delegate)
+            }
+            return NSClassFromString("AppDelegate")
+        }()
+        guard let validClass = delegateClass else { return }
+        
+        swizzleQuickActions(delegateClass: validClass)
+        swizzleUniversalLinks(delegateClass: validClass)
+        swizzleCustomURLSchemes(delegateClass: validClass)
 #elseif os(macOS)
-            guard let delegate = NSApplication.shared.delegate else { return }
-            let delegateClass: AnyClass = object_getClass(delegate)!
-            
-            swizzleUniversalLinks(delegateClass: delegateClass)
-            swizzleCustomURLSchemes(delegateClass: delegateClass)
+        let delegateClass: AnyClass? = {
+            if let delegate = NSApplication.shared.delegate {
+                return object_getClass(delegate)
+            }
+            return NSClassFromString("AppDelegate")
+        }()
+        guard let validClass = delegateClass else { return }
+        
+        swizzleUniversalLinks(delegateClass: validClass)
+        swizzleCustomURLSchemes(delegateClass: validClass)
 #endif
-        }
     }
     
     // MARK: - Quick Actions
