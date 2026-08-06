@@ -25,29 +25,21 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async {
-                    self.document_error.emit(collection, document, errorDesc)
-                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
-                }
+                self.document_error.emit(collection, document, errorDesc)
+                let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else if let documentSnap = documentSnap, documentSnap.exists {
                 let data = documentSnap.data() ?? [:]
                 let gDict = VariantDictionary()
                 for (key, value) in data {
                     gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
                 }
-                DispatchQueue.main.async {
-                    let _ = callback.call(Variant(true), Variant(document), Variant(gDict), Variant(""))
-                }
+                let _ = callback.callDeferred(Variant(true), Variant(document), Variant(gDict), Variant(""))
             } else if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async {
-                    self.document_error.emit(collection, document, errorDesc)
-                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
-                }
+                self.document_error.emit(collection, document, errorDesc)
+                let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
-                DispatchQueue.main.async {
-                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
-                }
+                let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
             }
         }
     }
@@ -59,10 +51,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async {
-                    self.document_error.emit(collection, "", errorDesc)
-                    let _ = callback.call(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
-                }
+                self.document_error.emit(collection, "", errorDesc)
+                let _ = callback.callDeferred(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
             } else if let querySnapshot = querySnapshot {
                 let results = VariantDictionary()
                 for documentSnap in querySnapshot.documents {
@@ -72,9 +62,9 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                     }
                     results[Variant(documentSnap.documentID)] = Variant(gDict)
                 }
-                DispatchQueue.main.async {
-                    let _ = callback.call(Variant(true), Variant(""), Variant(results), Variant(""))
-                }
+                let _ = callback.callDeferred(Variant(true), Variant(""), Variant(results), Variant(""))
+            } else {
+                let _ = callback.callDeferred(Variant(true), Variant(""), Variant(VariantDictionary()), Variant(""))
             }
         }
     }
@@ -97,14 +87,12 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async {
-                    self.document_error.emit(collection, "", errorDesc)
-                    let _ = callback.call(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
-                }
+                self.document_error.emit(collection, "", errorDesc)
+                let _ = callback.callDeferred(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
             } else if let docId = ref?.documentID {
-                DispatchQueue.main.async {
-                    let _ = callback.call(Variant(true), Variant(docId), Variant(VariantDictionary()), Variant(""))
-                }
+                let _ = callback.callDeferred(Variant(true), Variant(docId), Variant(VariantDictionary()), Variant(""))
+            } else {
+                let _ = callback.callDeferred(Variant(false), Variant(""), Variant(VariantDictionary()), Variant("Failed to get document ID"))
             }
         }
     }
@@ -126,14 +114,10 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async {
-                    self.document_error.emit(collection, document, errorDesc)
-                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
-                }
+                self.document_error.emit(collection, document, errorDesc)
+                let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
-                DispatchQueue.main.async {
-                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
-                }
+                let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
             }
         }
     }
@@ -155,14 +139,10 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async {
-                    self.document_error.emit(collection, document, errorDesc)
-                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
-                }
+                self.document_error.emit(collection, document, errorDesc)
+                let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
-                DispatchQueue.main.async {
-                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
-                }
+                let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
             }
         }
     }
@@ -195,14 +175,10 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async {
-                    self.document_error.emit(collection, document, errorDesc)
-                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
-                }
+                self.document_error.emit(collection, document, errorDesc)
+                let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
-                DispatchQueue.main.async {
-                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
-                }
+                let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
             }
         }
     }
@@ -214,14 +190,10 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async {
-                    self.document_error.emit(collection, document, errorDesc)
-                    let _ = callback.call(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
-                }
+                self.document_error.emit(collection, document, errorDesc)
+                let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
-                DispatchQueue.main.async {
-                    let _ = callback.call(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
-                }
+                let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
             }
         }
     }
