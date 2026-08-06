@@ -12,15 +12,8 @@ import FirebaseStorage
 @Godot
 class FirebaseStorageManager: RefCounted, @unchecked Sendable {
     
-    @Signal("path", "download_url") var upload_completed: SignalWithArguments<String, String>
-    @Signal("path", "error") var upload_failed: SignalWithArguments<String, String>
-    @Signal("storage_path", "local_path") var download_completed: SignalWithArguments<String, String>
-    @Signal("storage_path", "error") var download_failed: SignalWithArguments<String, String>
-    @Signal("storage_path") var delete_completed: SignalWithArguments<String>
-    @Signal("storage_path", "error") var delete_failed: SignalWithArguments<String, String>
-    
     @Callable
-    func upload_file(local_path: String, storage_path: String) {
+    func upload_file(local_path: String, storage_path: String, callback: Callable) {
         let storage = Storage.storage()
         let storageRef = storage.reference().child(storage_path)
         let localFile = URL(fileURLWithPath: local_path)
@@ -29,21 +22,28 @@ class FirebaseStorageManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.upload_failed.emit(storage_path, errorDesc) }
+                let _ = callback.callDeferred(Variant(false), Variant(storage_path), Variant(""), Variant(errorDesc))
                 return
             }
             storageRef.downloadURL { [weak self] (url, error) in
                 guard let self = self else { return }
+                if let error = error {
+                    let errorDesc = error.localizedDescription
+                    let _ = callback.callDeferred(Variant(false), Variant(storage_path), Variant(""), Variant(errorDesc))
+                    return
+                }
                 if let downloadURL = url {
                     let urlString = downloadURL.absoluteString
-                    DispatchQueue.main.async { self.upload_completed.emit(storage_path, urlString) }
+                    let _ = callback.callDeferred(Variant(true), Variant(storage_path), Variant(urlString), Variant(""))
+                } else {
+                    let _ = callback.callDeferred(Variant(false), Variant(storage_path), Variant(""), Variant("Unknown error: missing url"))
                 }
             }
         }
     }
     
     @Callable
-    func download_file(storage_path: String, local_path: String) {
+    func download_file(storage_path: String, local_path: String, callback: Callable) {
         let storage = Storage.storage()
         let storageRef = storage.reference().child(storage_path)
         let localFile = URL(fileURLWithPath: local_path)
@@ -52,15 +52,15 @@ class FirebaseStorageManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.download_failed.emit(storage_path, errorDesc) }
+                let _ = callback.callDeferred(Variant(false), Variant(storage_path), Variant(""), Variant(errorDesc))
             } else {
-                DispatchQueue.main.async { self.download_completed.emit(storage_path, local_path) }
+                let _ = callback.callDeferred(Variant(true), Variant(storage_path), Variant(local_path), Variant(""))
             }
         }
     }
     
     @Callable
-    func delete_file(storage_path: String) {
+    func delete_file(storage_path: String, callback: Callable) {
         let storage = Storage.storage()
         let storageRef = storage.reference().child(storage_path)
         
@@ -68,9 +68,9 @@ class FirebaseStorageManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.delete_failed.emit(storage_path, errorDesc) }
+                let _ = callback.callDeferred(Variant(false), Variant(storage_path), Variant(""), Variant(errorDesc))
             } else {
-                DispatchQueue.main.async { self.delete_completed.emit(storage_path) }
+                let _ = callback.callDeferred(Variant(true), Variant(storage_path), Variant(""), Variant(""))
             }
         }
     }

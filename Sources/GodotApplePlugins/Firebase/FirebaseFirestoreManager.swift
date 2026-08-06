@@ -12,10 +12,6 @@ import FirebaseFirestore
 @Godot
 class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     
-    @Signal("collection", "document", "error_msg") var document_error: SignalWithArguments<String, String, String>
-    @Signal("collection", "document", "data") var document_snapshot: SignalWithArguments<String, String, VariantDictionary>
-    @Signal("collection", "data") var collection_snapshot: SignalWithArguments<String, VariantDictionary>
-
     private var activeListeners: [String: ListenerRegistration] = [:]
 
     @Callable
@@ -25,7 +21,6 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                self.document_error.emit(collection, document, errorDesc)
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else if let documentSnap = documentSnap, documentSnap.exists {
                 let data = documentSnap.data() ?? [:]
@@ -36,7 +31,6 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                 let _ = callback.callDeferred(Variant(true), Variant(document), Variant(gDict), Variant(""))
             } else if let error = error {
                 let errorDesc = error.localizedDescription
-                self.document_error.emit(collection, document, errorDesc)
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
                 let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
@@ -51,7 +45,6 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                self.document_error.emit(collection, "", errorDesc)
                 let _ = callback.callDeferred(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
             } else if let querySnapshot = querySnapshot {
                 let results = VariantDictionary()
@@ -87,7 +80,6 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                self.document_error.emit(collection, "", errorDesc)
                 let _ = callback.callDeferred(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
             } else if let docId = ref?.documentID {
                 let _ = callback.callDeferred(Variant(true), Variant(docId), Variant(VariantDictionary()), Variant(""))
@@ -114,7 +106,6 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                self.document_error.emit(collection, document, errorDesc)
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
                 let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
@@ -139,7 +130,6 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                self.document_error.emit(collection, document, errorDesc)
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
                 let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
@@ -175,7 +165,6 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                self.document_error.emit(collection, document, errorDesc)
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
                 let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
@@ -190,7 +179,6 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                self.document_error.emit(collection, document, errorDesc)
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
             } else {
                 let _ = callback.callDeferred(Variant(true), Variant(document), Variant(VariantDictionary()), Variant(""))
@@ -199,14 +187,14 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     }
     
     @Callable
-    func listen_to_document(collection: String, document: String) -> String {
+    func listen_to_document(collection: String, document: String, callback: Callable) -> String {
         let listenerId = UUID().uuidString
         let db = Firestore.firestore()
         let listener = db.collection(collection).document(document).addSnapshotListener { [weak self] (documentSnapshot, error) in
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, document, errorDesc) }
+                let _ = callback.callDeferred(Variant("error"), Variant(false), Variant(collection), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
                 return
             }
             if let documentSnapshot = documentSnapshot, documentSnapshot.exists, let data = documentSnapshot.data() {
@@ -214,9 +202,9 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                 for (key, value) in data {
                     gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
                 }
-                DispatchQueue.main.async { self.document_snapshot.emit(collection, document, gDict) }
+                let _ = callback.callDeferred(Variant("snapshot"), Variant(true), Variant(collection), Variant(document), Variant(gDict), Variant(""))
             } else {
-                DispatchQueue.main.async { self.document_snapshot.emit(collection, document, VariantDictionary()) }
+                let _ = callback.callDeferred(Variant("snapshot"), Variant(true), Variant(collection), Variant(document), Variant(VariantDictionary()), Variant(""))
             }
         }
         activeListeners[listenerId] = listener
@@ -224,14 +212,14 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     }
     
     @Callable
-    func listen_to_collection(collection: String) -> String {
+    func listen_to_collection(collection: String, callback: Callable) -> String {
         let listenerId = UUID().uuidString
         let db = Firestore.firestore()
         let listener = db.collection(collection).addSnapshotListener { [weak self] (querySnapshot, error) in
             guard let self = self else { return }
             if let error = error {
                 let errorDesc = error.localizedDescription
-                DispatchQueue.main.async { self.document_error.emit(collection, "", errorDesc) }
+                let _ = callback.callDeferred(Variant("error"), Variant(false), Variant(collection), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
                 return
             }
             let results = VariantDictionary()
@@ -244,7 +232,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                     results[Variant(documentSnap.documentID)] = Variant(gDict)
                 }
             }
-            DispatchQueue.main.async { self.collection_snapshot.emit(collection, results) }
+            let _ = callback.callDeferred(Variant("snapshot"), Variant(true), Variant(collection), Variant(""), Variant(results), Variant(""))
         }
         activeListeners[listenerId] = listener
         return listenerId

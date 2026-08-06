@@ -10,8 +10,8 @@ import FirebaseFunctions
 @Godot
 class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
     
-    @Signal("name", "result") var function_result: SignalWithArguments<String, Variant?>
-    @Signal("name", "error") var function_error: SignalWithArguments<String, String>
+    // Results are now delivered via the Callable callback accepted by call_function.
+    // Callback signature: (success: Bool, name: String, result_data: Variant, error_msg: String)
     
     private var region: String = ""
     
@@ -21,15 +21,14 @@ class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
     }
     
     @Callable
-    func call_function(name: String, parameters: VariantDictionary) {
+    func call_function(name: String, parameters: VariantDictionary, callback: Callable) {
         let functions = region.isEmpty ? Functions.functions() : Functions.functions(region: region)
         var props: [String: Any] = [:]
         for key in parameters.keys() {
             let k = FirebaseVariantConverter.stringifyKey(key)
             props[k] = FirebaseVariantConverter.variantToAny(parameters[key])
         }
-        functions.httpsCallable(name).call(props) { [weak self] result, error in
-            guard let self = self else { return }
+        functions.httpsCallable(name).call(props) { result, error in
             if let error = error as NSError? {
                 var errorDesc = error.localizedDescription
                 if error.domain == FunctionsErrorDomain {
@@ -38,12 +37,12 @@ class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
                         errorDesc = "\(message) (\(details))"
                     }
                 }
-                DispatchQueue.main.async { self.function_error.emit(name, errorDesc) }
+                let _ = callback.callDeferred(Variant(false), Variant(name), Variant(), Variant(errorDesc))
             } else if let data = result?.data {
                 let vData = FirebaseVariantConverter.anyToVariant(data)
-                DispatchQueue.main.async { self.function_result.emit(name, vData) }
+                let _ = callback.callDeferred(Variant(true), Variant(name), vData ?? Variant(), Variant(""))
             } else {
-                DispatchQueue.main.async { self.function_result.emit(name, nil) }
+                let _ = callback.callDeferred(Variant(true), Variant(name), Variant(), Variant(""))
             }
         }
     }
