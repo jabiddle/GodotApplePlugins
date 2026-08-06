@@ -17,8 +17,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     @Callable
     func get_document(collection: String, document: String, callback: Callable) {
         let db = Firestore.firestore()
-        db.collection(collection).document(document).getDocument { [weak self] (documentSnap, error) in
-            guard let self = self else { return }
+        db.collection(collection).document(document).getDocument { (documentSnap, error) in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
@@ -41,8 +40,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     @Callable
     func list_documents(collection: String, callback: Callable) {
         let db = Firestore.firestore()
-        db.collection(collection).getDocuments { [weak self] (querySnapshot, error) in
-            guard let self = self else { return }
+        db.collection(collection).getDocuments { (querySnapshot, error) in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
@@ -76,8 +74,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
         }
         let db = Firestore.firestore()
         var ref: DocumentReference? = nil
-        ref = db.collection(collection).addDocument(data: props) { [weak self] error in
-            guard let self = self else { return }
+        ref = db.collection(collection).addDocument(data: props) { error in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))
@@ -102,8 +99,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             }
         }
         let db = Firestore.firestore()
-        db.collection(collection).document(document).setData(props, merge: true) { [weak self] error in
-            guard let self = self else { return }
+        db.collection(collection).document(document).setData(props, merge: true) { error in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
@@ -126,8 +122,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
             }
         }
         let db = Firestore.firestore()
-        db.collection(collection).document(document).updateData(props) { [weak self] error in
-            guard let self = self else { return }
+        db.collection(collection).document(document).updateData(props) { error in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
@@ -161,8 +156,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
         }
         
         batch.setData(props, forDocument: docRef, merge: true)
-        batch.commit { [weak self] error in
-            guard let self = self else { return }
+        batch.commit { error in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
@@ -175,8 +169,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     @Callable
     func delete_document(collection: String, document: String, callback: Callable) {
         let db = Firestore.firestore()
-        db.collection(collection).document(document).delete() { [weak self] error in
-            guard let self = self else { return }
+        db.collection(collection).document(document).delete() { error in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
@@ -190,8 +183,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func listen_to_document(collection: String, document: String, callback: Callable) -> String {
         let listenerId = UUID().uuidString
         let db = Firestore.firestore()
-        let listener = db.collection(collection).document(document).addSnapshotListener { [weak self] (documentSnapshot, error) in
-            guard let self = self else { return }
+        let listener = db.collection(collection).document(document).addSnapshotListener { (documentSnapshot, error) in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant("error"), Variant(false), Variant(collection), Variant(document), Variant(VariantDictionary()), Variant(errorDesc))
@@ -215,8 +207,7 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
     func listen_to_collection(collection: String, callback: Callable) -> String {
         let listenerId = UUID().uuidString
         let db = Firestore.firestore()
-        let listener = db.collection(collection).addSnapshotListener { [weak self] (querySnapshot, error) in
-            guard let self = self else { return }
+        let listener = db.collection(collection).addSnapshotListener { (querySnapshot, error) in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant("error"), Variant(false), Variant(collection), Variant(""), Variant(VariantDictionary()), Variant(errorDesc))

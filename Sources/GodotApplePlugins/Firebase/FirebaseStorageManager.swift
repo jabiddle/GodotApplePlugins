@@ -18,15 +18,13 @@ class FirebaseStorageManager: RefCounted, @unchecked Sendable {
         let storageRef = storage.reference().child(storage_path)
         let localFile = URL(fileURLWithPath: local_path)
         
-        storageRef.putFile(from: localFile, metadata: nil) { [weak self] metadata, error in
-            guard let self = self else { return }
+        storageRef.putFile(from: localFile, metadata: nil) { metadata, error in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(storage_path), Variant(""), Variant(errorDesc))
                 return
             }
-            storageRef.downloadURL { [weak self] (url, error) in
-                guard let self = self else { return }
+            storageRef.downloadURL { (url, error) in
                 if let error = error {
                     let errorDesc = error.localizedDescription
                     let _ = callback.callDeferred(Variant(false), Variant(storage_path), Variant(""), Variant(errorDesc))
@@ -48,8 +46,7 @@ class FirebaseStorageManager: RefCounted, @unchecked Sendable {
         let storageRef = storage.reference().child(storage_path)
         let localFile = URL(fileURLWithPath: local_path)
         
-        storageRef.write(toFile: localFile) { [weak self] url, error in
-            guard let self = self else { return }
+        storageRef.write(toFile: localFile) { url, error in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(storage_path), Variant(""), Variant(errorDesc))
@@ -64,8 +61,7 @@ class FirebaseStorageManager: RefCounted, @unchecked Sendable {
         let storage = Storage.storage()
         let storageRef = storage.reference().child(storage_path)
         
-        storageRef.delete { [weak self] error in
-            guard let self = self else { return }
+        storageRef.delete { error in
             if let error = error {
                 let errorDesc = error.localizedDescription
                 let _ = callback.callDeferred(Variant(false), Variant(storage_path), Variant(""), Variant(errorDesc))

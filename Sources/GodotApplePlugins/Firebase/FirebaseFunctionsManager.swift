@@ -21,7 +21,7 @@ class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
     }
     
     @Callable
-    func call_function(name: String, parameters: VariantDictionary, callback: Callable) {
+    func call_function(name: String, parameters: VariantDictionary, callback: SwiftGodotRuntime.Callable) {
         let functions = region.isEmpty ? Functions.functions() : Functions.functions(region: region)
         var props: [String: Any] = [:]
         for key in parameters.keys() {
@@ -37,12 +37,12 @@ class FirebaseFunctionsManager: RefCounted, @unchecked Sendable {
                         errorDesc = "\(message) (\(details))"
                     }
                 }
-                let _ = callback.callDeferred(Variant(false), Variant(name), Variant(), Variant(errorDesc))
+                let _ = callback.callDeferred(Variant(false), Variant(name), Variant(""), Variant(errorDesc))
             } else if let data = result?.data {
                 let vData = FirebaseVariantConverter.anyToVariant(data)
-                let _ = callback.callDeferred(Variant(true), Variant(name), vData ?? Variant(), Variant(""))
+                let _ = callback.callDeferred(Variant(true), Variant(name), vData ?? Variant(""), Variant(""))
             } else {
-                let _ = callback.callDeferred(Variant(true), Variant(name), Variant(), Variant(""))
+                let _ = callback.callDeferred(Variant(true), Variant(name), Variant(""), Variant(""))
             }
         }
     }
