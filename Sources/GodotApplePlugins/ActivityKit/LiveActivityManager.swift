@@ -12,7 +12,7 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
     }
 
     @Callable
-    func start_activity(attributesJson: String, stateJson: String) -> Variant? {
+    func start_activity(attributesJson: String, stateJson: String, staleDateEpoch: Double) -> Variant? {
 #if os(iOS)
         if #available(iOS 16.1, *) {
             guard ActivityAuthorizationInfo().areActivitiesEnabled else {
@@ -24,7 +24,8 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
             
             do {
                 if #available(iOS 16.2, *) {
-                    let content = ActivityContent(state: contentState, staleDate: nil)
+                    let staleDate = staleDateEpoch > 0 ? Date(timeIntervalSince1970: staleDateEpoch) : nil
+                    let content = ActivityContent(state: contentState, staleDate: staleDate)
                     _ = try Activity<GenericLiveActivityAttributes>.request(
                         attributes: attributes,
                         content: content,
@@ -47,7 +48,7 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
     }
 
     @Callable
-    func update_activity(stateJson: String) {
+    func update_activity(stateJson: String, staleDateEpoch: Double) {
 #if os(iOS)
         if #available(iOS 16.1, *) {
             Task {
@@ -55,7 +56,8 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
                     let newState = GenericLiveActivityAttributes.ContentState(stateJson: stateJson)
                     
                     if #available(iOS 16.2, *) {
-                        let content = ActivityContent(state: newState, staleDate: nil)
+                        let staleDate = staleDateEpoch > 0 ? Date(timeIntervalSince1970: staleDateEpoch) : nil
+                        let content = ActivityContent(state: newState, staleDate: staleDate)
                         await activity.update(content)
                     } else {
                         await activity.update(using: newState)
@@ -67,7 +69,7 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
     }
 
     @Callable
-    func end_activity(stateJson: String) {
+    func end_activity(stateJson: String, staleDateEpoch: Double) {
 #if os(iOS)
         if #available(iOS 16.1, *) {
             Task {
@@ -75,7 +77,8 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
                     let newState = GenericLiveActivityAttributes.ContentState(stateJson: stateJson)
                     
                     if #available(iOS 16.2, *) {
-                        let content = ActivityContent(state: newState, staleDate: nil)
+                        let staleDate = staleDateEpoch > 0 ? Date(timeIntervalSince1970: staleDateEpoch) : nil
+                        let content = ActivityContent(state: newState, staleDate: staleDate)
                         await activity.end(content, dismissalPolicy: .immediate)
                     } else {
                         await activity.end(using: newState, dismissalPolicy: .immediate)
