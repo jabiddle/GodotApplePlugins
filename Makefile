@@ -3,8 +3,6 @@
 # Allow overriding common build knobs.
 CONFIG ?= Release
 DERIVED_DATA ?= $(CURDIR)/.xcodebuild
-WORKSPACE ?= .swiftpm/xcode/package.xcworkspace
-SCHEME ?= GodotApplePlugins
 FRAMEWORK_NAMES ?= GodotApplePlugins
 XCODEBUILD ?= xcodebuild
 XCODEBUILD_ARGS ?=
@@ -33,7 +31,6 @@ build-ios:
 	set -e; set -o pipefail; \
 	for framework in $(FRAMEWORK_NAMES); do \
 		$(XCODEBUILD) \
-			-workspace '$(WORKSPACE)' \
 			-scheme $$framework \
 			-configuration '$(CONFIG)' \
 			-destination "generic/platform=iOS" \
@@ -68,7 +65,6 @@ build-macos:
 	set -e; set -o pipefail; \
 	for framework in $(FRAMEWORK_NAMES); do \
 		$(XCODEBUILD) \
-			-workspace '$(WORKSPACE)' \
 			-scheme $$framework \
 			-configuration '$(CONFIG)' \
 			-destination "generic/platform=macOS" \

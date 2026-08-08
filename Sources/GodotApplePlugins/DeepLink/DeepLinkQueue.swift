@@ -29,7 +29,7 @@ protocol DeepLinkSink: AnyObject, Sendable {
 /// re-created.
 final class DeepLinkQueue: @unchecked Sendable {
 
-    nonisolated(unsafe) static let shared = DeepLinkQueue()
+    static let shared = DeepLinkQueue()
 
     /// Identical payloads arriving inside this window count as a single delivery. Godot fans out
     /// both the scene callbacks and the legacy application callbacks, so one tap can legitimately

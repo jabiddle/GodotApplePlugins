@@ -22,7 +22,7 @@ import AppKit
 /// array. Registering once here therefore covers both callback families, with no swizzling.
 final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDelegate, @unchecked Sendable {
 
-    nonisolated(unsafe) static let shared = DeepLinkService()
+    static let shared = DeepLinkService()
 
     /// Godot renamed the delegate class after 4.7, so resolve it by name at runtime rather than
     /// linking against it — it lives in the host binary, not in this framework.
@@ -199,7 +199,7 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
 /// back the replacement and recurses until the stack runs out.
 final class DeepLinkService: NSObject, @unchecked Sendable {
 
-    nonisolated(unsafe) static let shared = DeepLinkService()
+    static let shared = DeepLinkService()
 
     /// ObjC encodes `BOOL` as `signed char` on x86_64 but as C `bool` on arm64.
     #if arch(x86_64)
