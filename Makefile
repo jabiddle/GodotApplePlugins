@@ -1,4 +1,4 @@
-.PHONY: run xcframework check_swiftsyntax build pre-build build-ios build-macos build-windows build-linux
+.PHONY: run xcframework check_swiftsyntax build pre-build build-ios build-macos build-windows build-linux dist dist-ios dist-macos
 
 # Allow overriding common build knobs.
 CONFIG ?= Release
@@ -138,37 +138,54 @@ build-linux:
 
 package: build dist
 
-dist:
+# dist is split per platform so a job that only built one platform never reaches
+# into the other platform's derived data. Stale .xcodebuild-<platform> trees
+# survive between CI jobs on a self-hosted runner, and a failed build leaves the
+# .framework directory in place with no binary inside it, so presence of the
+# directory is not evidence that the platform was built.
+dist: dist-ios dist-macos
+
+dist-ios:
 	set -e; \
 	for framework in $(FRAMEWORK_NAMES); do \
 		config_lc=`echo $(CONFIG) | tr '[:upper:]' '[:lower:]'`; \
 		out_dir="$(CURDIR)/addons/$$framework/bin/$$config_lc"; \
-		mkdir -p $$out_dir; \
-		rm -rf $$out_dir/$$framework.xcframework; \
-		rm -rf $$out_dir/$$framework*.framework; \
-		\
-		if [ -d "$(DERIVED_DATA)-ios/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework" ]; then \
-			$(XCODEBUILD) -create-xcframework \
-				-framework "$(DERIVED_DATA)-ios/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework" \
-				-output "$$out_dir/$${framework}.xcframework"; \
-		else \
-			echo "Skipping iOS xcframework creation for $$framework (directory not found)"; \
+		IOS_FW="$(DERIVED_DATA)-ios/Build/Products/$(CONFIG)-iphoneos/PackageFrameworks/$$framework.framework"; \
+		if [ ! -f "$$IOS_FW/$$framework" ]; then \
+			echo "error: iOS binary missing at $$IOS_FW/$$framework" >&2; \
+			echo "       The iOS build did not produce a linked framework. Remove $(DERIVED_DATA)-ios and rebuild." >&2; \
+			exit 1; \
 		fi; \
-		\
+		mkdir -p "$$out_dir"; \
+		rm -rf "$$out_dir/$$framework.xcframework"; \
+		$(XCODEBUILD) -create-xcframework \
+			-framework "$$IOS_FW" \
+			-output "$$out_dir/$${framework}.xcframework"; \
+	done
+
+dist-macos:
+	set -e; \
+	for framework in $(FRAMEWORK_NAMES); do \
+		config_lc=`echo $(CONFIG) | tr '[:upper:]' '[:lower:]'`; \
+		out_dir="$(CURDIR)/addons/$$framework/bin/$$config_lc"; \
 		MAC_FW="$(DERIVED_DATA)-macos/Build/Products/$(CONFIG)/PackageFrameworks/$${framework}.framework"; \
-		if [ -d "$$MAC_FW" ]; then \
-			rsync -a "$$MAC_FW/" "$$out_dir/$${framework}_x64.framework"; \
-			lipo -thin x86_64 "$$out_dir/$${framework}_x64.framework/Versions/Current/$${framework}" -output "$$out_dir/$${framework}_x64.framework/Versions/Current/$${framework}" 2>/dev/null || true; \
-			\
-			rsync -a "$$MAC_FW/" "$$out_dir/$${framework}.framework"; \
-			lipo -thin arm64 "$$out_dir/$${framework}.framework/Versions/Current/$${framework}" -output "$$out_dir/$${framework}.framework/Versions/Current/$${framework}" 2>/dev/null || true; \
-			\
-			if [ -d "doc_classes/" ]; then \
-				rsync -a "doc_classes/" "$$out_dir/$${framework}_x64.framework/Versions/Current/Resources/doc_classes/" 2>/dev/null || true; \
-				rsync -a "doc_classes/" "$$out_dir/$${framework}.framework/Versions/Current/Resources/doc_classes/" 2>/dev/null || true; \
-			fi; \
-		else \
-			echo "Skipping macOS framework copy for $$framework (directory not found)"; \
+		if [ ! -f "$$MAC_FW/Versions/Current/$$framework" ]; then \
+			echo "error: macOS binary missing at $$MAC_FW/Versions/Current/$$framework" >&2; \
+			echo "       The macOS build did not produce a linked framework. Remove $(DERIVED_DATA)-macos and rebuild." >&2; \
+			exit 1; \
+		fi; \
+		mkdir -p "$$out_dir"; \
+		rm -rf "$$out_dir/$${framework}.framework" "$$out_dir/$${framework}_x64.framework"; \
+		\
+		rsync -a "$$MAC_FW/" "$$out_dir/$${framework}_x64.framework"; \
+		lipo -thin x86_64 "$$out_dir/$${framework}_x64.framework/Versions/Current/$${framework}" -output "$$out_dir/$${framework}_x64.framework/Versions/Current/$${framework}" 2>/dev/null || true; \
+		\
+		rsync -a "$$MAC_FW/" "$$out_dir/$${framework}.framework"; \
+		lipo -thin arm64 "$$out_dir/$${framework}.framework/Versions/Current/$${framework}" -output "$$out_dir/$${framework}.framework/Versions/Current/$${framework}" 2>/dev/null || true; \
+		\
+		if [ -d "doc_classes/" ]; then \
+			rsync -a "doc_classes/" "$$out_dir/$${framework}_x64.framework/Versions/Current/Resources/doc_classes/" 2>/dev/null || true; \
+			rsync -a "doc_classes/" "$$out_dir/$${framework}.framework/Versions/Current/Resources/doc_classes/" 2>/dev/null || true; \
 		fi; \
 	done
 
