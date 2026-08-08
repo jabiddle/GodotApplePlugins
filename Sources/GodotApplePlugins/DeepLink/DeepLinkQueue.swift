@@ -49,7 +49,10 @@ final class DeepLinkQueue: @unchecked Sendable {
 
     func enqueue(_ kind: DeepLinkKind, _ payload: String) {
         let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else {
+            DeepLinkLog.write("enqueue \(kind.rawValue): dropped, empty payload")
+            return
+        }
 
         let event = DeepLinkEvent(
             kind: kind,
@@ -62,6 +65,7 @@ final class DeepLinkQueue: @unchecked Sendable {
         recent.removeAll { event.at - $0.at > Self.dedupeWindow }
         if recent.contains(where: { $0.kind == event.kind && $0.payload == event.payload }) {
             lock.unlock()
+            DeepLinkLog.write("enqueue \(kind.rawValue) '\(trimmed)': dropped as duplicate")
             return
         }
         recent.append(event)
@@ -73,12 +77,26 @@ final class DeepLinkQueue: @unchecked Sendable {
                 buffered.removeFirst(buffered.count - Self.maxBuffered)
             }
         }
+        let hasSink = sink != nil
+        let ready = sinkIsReady
+        let depth = buffered.count
 
         lock.unlock()
 
         if let target {
+            DeepLinkLog.write("enqueue \(kind.rawValue) '\(trimmed)': delivering now")
             Self.onMain { target.deliverDeepLink(event) }
+        } else {
+            DeepLinkLog.write("enqueue \(kind.rawValue) '\(trimmed)': buffered "
+                              + "(sink=\(hasSink), ready=\(ready), depth=\(depth))")
         }
+    }
+
+    /// One-line snapshot for `DeepLinkManager.get_debug_state()`.
+    func stateDescription() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return "sink=\(sink != nil) ready=\(sinkIsReady) buffered=\(buffered.count)"
     }
 
     // MARK: - Consumer side (called from DeepLinkManager)
@@ -88,6 +106,7 @@ final class DeepLinkQueue: @unchecked Sendable {
         sink = newSink
         sinkIsReady = false
         lock.unlock()
+        DeepLinkLog.write("sink attached")
     }
 
     func detach(_ oldSink: any DeepLinkSink) {
@@ -113,6 +132,8 @@ final class DeepLinkQueue: @unchecked Sendable {
         buffered.removeAll()
         lock.unlock()
 
+        DeepLinkLog.write("markReady: sink=\(target != nil) flushing=\(pending.count)")
+
         guard let target, !pending.isEmpty else { return }
         Self.onMain {
             for event in pending {
@@ -124,9 +145,11 @@ final class DeepLinkQueue: @unchecked Sendable {
     /// Removes and returns everything buffered so far, oldest first.
     func drainPending() -> [DeepLinkEvent] {
         lock.lock()
-        defer { lock.unlock() }
         let pending = buffered
         buffered.removeAll()
+        lock.unlock()
+
+        DeepLinkLog.write("drainPending: \(pending.count) event(s)")
         return pending
     }
 

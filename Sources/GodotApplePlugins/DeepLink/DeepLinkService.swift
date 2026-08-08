@@ -32,6 +32,11 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
         "GDTAppDelegate",
     ]
 
+    /// Outcome of `register()`, whatever it was. Surfaced to GDScript through
+    /// `DeepLinkManager.get_debug_state()` so a release build on a device can be diagnosed
+    /// without a console.
+    nonisolated(unsafe) static private(set) var registrationReport = "not attempted"
+
     /// Called from `pluginSetupHook` at `.core` init level.
     ///
     /// That runs inside `application:didFinishLaunchingWithOptions:` (which is what calls
@@ -40,16 +45,14 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
     /// late to ever read `launchOptions` — nothing here may depend on them.
     static func register() {
         guard let delegateClass = resolveDelegateClass() else {
-            GD.print("DeepLinkService: could not resolve Godot's app delegate class (tried "
-                     + "\(delegateClassNames.joined(separator: ", "))). "
-                     + "Quick actions and deep links are disabled.")
+            fail("no app delegate class found (tried \(delegateClassNames.joined(separator: ", ")))")
             return
         }
+        DeepLinkLog.write("resolved delegate class \(NSStringFromClass(delegateClass))")
 
         let addService = NSSelectorFromString("addService:")
         guard let method = class_getClassMethod(delegateClass, addService) else {
-            GD.print("DeepLinkService: \(delegateClass) has no +addService:. "
-                     + "Quick actions and deep links are disabled.")
+            fail("\(NSStringFromClass(delegateClass)) has no +addService:")
             return
         }
 
@@ -60,7 +63,41 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
         )
         addServiceFunction(delegateClass, addService, shared)
 
-        installWarmQuickActionShim(on: delegateClass)
+        // Read the registry back. If our object is not in it the fan-out will never reach us, and
+        // that is the difference between "we were never called" and "we were called with nothing".
+        let services = readServices(from: delegateClass)
+        let registered = services?.contains(where: { ($0 as AnyObject) === shared }) ?? false
+        guard registered else {
+            fail("+addService: accepted but the service is not in \(NSStringFromClass(delegateClass)).services "
+                 + "(count \(services?.count ?? -1))")
+            return
+        }
+
+        let shimInstalled = installWarmQuickActionShim(on: delegateClass)
+
+        // Godot skips any service that fails `respondsToSelector:`. If Swift did not expose one of
+        // these to the ObjC runtime the fan-out silently walks past us, so prove it here rather
+        // than wondering later why a callback "never fired".
+        let exposure = ["scene:willConnectToSession:options:",
+                        "scene:openURLContexts:",
+                        "scene:continueUserActivity:",
+                        "windowScene:performActionForShortcutItem:completionHandler:",
+                        "application:performActionForShortcutItem:completionHandler:",
+                        "application:continueUserActivity:restorationHandler:",
+                        "application:openURL:options:"]
+            .map { name in "\(name)=\(shared.responds(to: NSSelectorFromString(name)))" }
+            .joined(separator: " ")
+
+        registrationReport = "ok: registered with \(NSStringFromClass(delegateClass)), "
+            + "services=\(services?.count ?? -1), "
+            + "warmQuickActionShim=\(shimInstalled ? "added" : "already present"), "
+            + "selectors[\(exposure)]"
+        DeepLinkLog.write(registrationReport)
+    }
+
+    private static func fail(_ reason: String) {
+        registrationReport = "FAILED: \(reason)"
+        DeepLinkLog.write(registrationReport + " — quick actions and deep links will not reach GDScript.")
     }
 
     private static func resolveDelegateClass() -> AnyClass? {
@@ -72,27 +109,43 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
         return nil
     }
 
+    /// Reads `+[<delegateClass> services]`, Godot's class-level service registry.
+    private static func readServices(from delegateClass: AnyClass) -> [AnyObject]? {
+        let selector = NSSelectorFromString("services")
+        guard let method = class_getClassMethod(delegateClass, selector) else { return nil }
+
+        typealias ServicesFunction = @convention(c) (AnyClass, Selector) -> NSArray?
+        let servicesFunction = unsafeBitCast(
+            method_getImplementation(method),
+            to: ServicesFunction.self
+        )
+        guard let array = servicesFunction(delegateClass, selector) else { return nil }
+        return array as? [AnyObject]
+    }
+
     /// Godot's delegate does not fan out `windowScene:performActionForShortcutItem:completionHandler:`,
     /// so warm-launch quick actions currently reach no service at all. Add it ourselves.
     ///
     /// This is purely additive — never a swizzle — so there is no original implementation to
     /// chain to and no way to recurse. If the method ever appears upstream the guard below makes
     /// this inert and `windowScene(_:performActionFor:completionHandler:)` below takes over.
-    private static func installWarmQuickActionShim(on delegateClass: AnyClass) {
+    @discardableResult
+    private static func installWarmQuickActionShim(on delegateClass: AnyClass) -> Bool {
         let selector = NSSelectorFromString("windowScene:performActionForShortcutItem:completionHandler:")
-        guard class_getInstanceMethod(delegateClass, selector) == nil else { return }
+        guard class_getInstanceMethod(delegateClass, selector) == nil else { return false }
 
         typealias PerformActionBlock = @convention(block) (
             AnyObject, UIWindowScene, UIApplicationShortcutItem, @escaping (Bool) -> Void
         ) -> Void
 
         let block: PerformActionBlock = { _, _, shortcutItem, completionHandler in
+            DeepLinkLog.write("shim windowScene:performActionForShortcutItem: '\(shortcutItem.type)'")
             DeepLinkQueue.shared.enqueue(.quickAction, shortcutItem.type)
             completionHandler(true)
         }
 
         // v = void return, @ = self, : = _cmd, @ = scene, @ = shortcut item, @? = block
-        _ = class_addMethod(delegateClass, selector, imp_implementationWithBlock(block), "v@:@@@?")
+        return class_addMethod(delegateClass, selector, imp_implementationWithBlock(block), "v@:@@@?")
     }
 
     // MARK: - Scene lifecycle (the paths UIKit actually uses)
@@ -102,7 +155,13 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
         willConnectTo session: UISceneSession,
         options connectionOptions: UIScene.ConnectionOptions
     ) {
-        // Every cold launch arrives here, whatever the payload was.
+        // Every cold launch arrives here, whatever the payload was. Logged unconditionally: if
+        // this line is missing from the trace, Godot's fan-out never reached us and nothing
+        // downstream matters.
+        DeepLinkLog.write("scene:willConnectTo: shortcut=\(connectionOptions.shortcutItem?.type ?? "nil") "
+                          + "urls=\(connectionOptions.urlContexts.count) "
+                          + "activities=\(connectionOptions.userActivities.count)")
+
         if let shortcutItem = connectionOptions.shortcutItem {
             DeepLinkQueue.shared.enqueue(.quickAction, shortcutItem.type)
         }
@@ -115,12 +174,14 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        DeepLinkLog.write("scene:openURLContexts: count=\(URLContexts.count)")
         for context in URLContexts {
             ingest(url: context.url)
         }
     }
 
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        DeepLinkLog.write("scene:continueUserActivity: type=\(userActivity.activityType)")
         ingest(userActivity: userActivity)
     }
 
@@ -129,6 +190,7 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
         performActionFor shortcutItem: UIApplicationShortcutItem,
         completionHandler: @escaping (Bool) -> Void
     ) {
+        DeepLinkLog.write("windowScene:performActionFor: '\(shortcutItem.type)'")
         DeepLinkQueue.shared.enqueue(.quickAction, shortcutItem.type)
         completionHandler(true)
     }
@@ -144,6 +206,7 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
         performActionFor shortcutItem: UIApplicationShortcutItem,
         completionHandler: @escaping (Bool) -> Void
     ) {
+        DeepLinkLog.write("application:performActionFor: '\(shortcutItem.type)'")
         DeepLinkQueue.shared.enqueue(.quickAction, shortcutItem.type)
         completionHandler(true)
     }
@@ -153,6 +216,7 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
         continue userActivity: NSUserActivity,
         restorationHandler: @escaping ([any UIUserActivityRestoring]?) -> Void
     ) -> Bool {
+        DeepLinkLog.write("application:continueUserActivity: type=\(userActivity.activityType)")
         return ingest(userActivity: userActivity)
     }
 
@@ -161,6 +225,7 @@ final class DeepLinkService: NSObject, UIApplicationDelegate, UIWindowSceneDeleg
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
+        DeepLinkLog.write("application:openURL: \(url.scheme ?? "?")")
         return ingest(url: url)
     }
 
@@ -201,6 +266,11 @@ final class DeepLinkService: NSObject, @unchecked Sendable {
 
     static let shared = DeepLinkService()
 
+    /// Outcome of `register()`, whatever it was. Read by `DeepLinkManager.get_debug_state()`,
+    /// which is compiled for both Apple platforms, so this has to exist on both variants of the
+    /// service.
+    nonisolated(unsafe) static private(set) var registrationReport = "not attempted"
+
     /// ObjC encodes `BOOL` as `signed char` on x86_64 but as C `bool` on arm64.
     #if arch(x86_64)
     private static let boolEncoding = "c"
@@ -210,12 +280,17 @@ final class DeepLinkService: NSObject, @unchecked Sendable {
 
     static func register() {
         guard let delegateClass = NSClassFromString("GodotApplicationDelegate") else {
-            GD.print("DeepLinkService: could not resolve GodotApplicationDelegate. "
-                     + "Deep links are disabled.")
+            registrationReport = "FAILED: could not resolve GodotApplicationDelegate"
+            DeepLinkLog.write(registrationReport + " — deep links are disabled.")
             return
         }
+
         installUniversalLinkHook(on: delegateClass)
         installCustomURLHook(on: delegateClass)
+
+        registrationReport = "ok: hooked \(NSStringFromClass(delegateClass)) "
+            + "(application:continue:restorationHandler:, application:open:)"
+        DeepLinkLog.write(registrationReport)
     }
 
     /// Installs a new implementation for `selector` on `cls`, handing the block builder whatever
@@ -261,6 +336,7 @@ final class DeepLinkService: NSObject, @unchecked Sendable {
 
         replaceMethod(selector, on: cls, fallbackTypes: "\(boolEncoding)@:@@@?") { original in
             let block: ContinueBlock = { receiver, app, userActivity, restorationHandler in
+                DeepLinkLog.write("application:continueUserActivity: type=\(userActivity.activityType)")
                 var handled = false
                 if userActivity.activityType == NSUserActivityTypeBrowsingWeb,
                    let url = userActivity.webpageURL {
@@ -287,6 +363,7 @@ final class DeepLinkService: NSObject, @unchecked Sendable {
 
         replaceMethod(selector, on: cls, fallbackTypes: "v@:@@") { original in
             let block: OpenBlock = { receiver, app, urls in
+                DeepLinkLog.write("application:openURLs: count=\(urls.count)")
                 for url in urls {
                     DeepLinkQueue.shared.enqueue(.customURL, url.absoluteString)
                 }

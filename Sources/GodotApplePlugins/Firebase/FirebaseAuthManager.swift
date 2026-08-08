@@ -62,55 +62,167 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
     }
     
     @Callable
-    func sign_in_with_google(idToken: String, accessToken: String, forceSignIn: Bool, callback: Callable) {
+    func sign_in_with_google(idToken: String, accessToken: String, forceSignIn: Bool, autoCreate: Bool, callback: Callable) {
         let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: accessToken)
-        handle_credential(credential: credential, forceSignIn: forceSignIn, callback: callback)
+        handle_credential(credential: credential, forceSignIn: forceSignIn, autoCreate: autoCreate, callback: callback)
     }
-    
+
     @Callable
-    func sign_in_with_apple(idToken: String, rawNonce: String, forceSignIn: Bool, callback: Callable) {
+    func sign_in_with_apple(idToken: String, rawNonce: String, forceSignIn: Bool, autoCreate: Bool, callback: Callable) {
         let credential = OAuthProvider.credential(providerID: .apple, idToken: idToken, rawNonce: rawNonce)
-        handle_credential(credential: credential, forceSignIn: forceSignIn, callback: callback)
+        handle_credential(credential: credential, forceSignIn: forceSignIn, autoCreate: autoCreate, callback: callback)
     }
-    
-    /// Helper that attempts account linking first, then falls back to a standard sign-in.
-    private func handle_credential(credential: AuthCredential, forceSignIn: Bool, callback: Callable) {
-        if !forceSignIn, let currentUser = Auth.auth().currentUser, currentUser.isAnonymous {
+
+    private func report(_ callback: Callable, _ success: Bool, _ resourceID: String, _ payload: String, _ errorMsg: String) {
+        let _ = callback.callDeferred(Variant(success), Variant(resourceID), Variant(payload), Variant(errorMsg))
+    }
+
+    /// `forceSignIn` selects the intent: `false` attaches the credential to the account
+    /// that is already signed in, `true` signs in as whoever owns the credential.
+    /// `autoCreate` mirrors the REST `autoCreate` flag — when `false`, a credential that
+    /// belongs to no account must report `user_not_found` rather than quietly provisioning one.
+    private func handle_credential(credential: AuthCredential, forceSignIn: Bool, autoCreate: Bool, callback: Callable) {
+        let currentUser = Auth.auth().currentUser
+
+        if !forceSignIn, let currentUser {
+            // Link onto the signed-in account whatever it is. Gating this on
+            // `isAnonymous` is what turned "link Apple to my Google account" into
+            // "sign in as a brand new Apple account".
             currentUser.link(with: credential) { authResult, error in
-                if let error = error {
-                    let nsError = error as NSError
-                    if nsError.domain == AuthErrorDomain &&
-                       (nsError.code == AuthErrorCode.credentialAlreadyInUse.rawValue ||
-                        nsError.code == AuthErrorCode.emailAlreadyInUse.rawValue) {
-                        let _ = callback.callDeferred(Variant(false), Variant(credential.provider), Variant("link_conflict"), Variant(error.localizedDescription))
-                    } else if nsError.domain == AuthErrorDomain && nsError.code == AuthErrorCode.userNotFound.rawValue {
-                        let _ = callback.callDeferred(Variant(false), Variant(credential.provider), Variant("user_not_found"), Variant(error.localizedDescription))
-                    } else {
-                        // Fall back to a standard sign-in for other errors
-                        self.perform_standard_sign_in(credential: credential, callback: callback)
-                    }
+                if let error {
+                    self.report_link_error(error, credential, callback)
                 } else if let user = authResult?.user {
-                    let uid = user.uid
-                    let _ = callback.callDeferred(Variant(true), Variant(uid), Variant(""), Variant(""))
+                    self.report(callback, true, user.uid, "", "")
                 }
             }
-        } else {
+            return
+        }
+
+        if autoCreate {
             perform_standard_sign_in(credential: credential, callback: callback)
+            return
+        }
+
+        guard let currentUser else {
+            // No session to protect, so sign in and roll back if that provisioned an account.
+            Auth.auth().signIn(with: credential) { authResult, error in
+                if let error {
+                    self.report(callback, false, credential.provider, "", error.localizedDescription)
+                    return
+                }
+                guard let authResult else { return }
+                if authResult.additionalUserInfo?.isNewUser == true {
+                    authResult.user.delete { _ in
+                        self.report(callback, false, credential.provider, "user_not_found", "No account exists for this provider.")
+                    }
+                    return
+                }
+                self.report(callback, true, authResult.user.uid, "", "")
+            }
+            return
+        }
+
+        // A session exists and has to survive the lookup, so probe by linking instead of
+        // by signing in: the SDK has no read-only "does this credential resolve to an
+        // account" call, and signing in would strand the current account's data.
+        currentUser.link(with: credential) { _, error in
+            guard let error else {
+                // The link succeeded, so no account owned this credential. Undo the probe
+                // and let the caller ask the user before committing to a link.
+                Auth.auth().currentUser?.unlink(fromProvider: credential.provider) { _, _ in
+                    self.report(callback, false, credential.provider, "user_not_found", "No account exists for this provider.")
+                }
+                return
+            }
+
+            let nsError = error as NSError
+            if nsError.domain == AuthErrorDomain, nsError.code == AuthErrorCode.credentialAlreadyInUse.rawValue {
+                // An account owns it. Apple identity tokens are single use, so sign in with
+                // the refreshed credential Firebase returns, not the one the probe consumed.
+                let updated = nsError.userInfo[AuthErrorUserInfoUpdatedCredentialKey] as? AuthCredential
+                self.perform_standard_sign_in(credential: updated ?? credential, callback: callback)
+                return
+            }
+
+            if nsError.domain == AuthErrorDomain, nsError.code == AuthErrorCode.providerAlreadyLinked.rawValue {
+                // The signed-in account already carries this provider, so an account
+                // certainly exists. This is the account-deletion re-verification path.
+                // The SDK rejects on local provider data without calling the server, so
+                // the credential is still unspent and a real sign-in can confirm that the
+                // identity actually matches (a different Apple ID yields a different uid).
+                self.perform_standard_sign_in(credential: credential, callback: callback)
+                return
+            }
+
+            self.report_link_error(error, credential, callback)
         }
     }
-    
+
+    // MARK: - Re-authentication
+    //
+    // Proving ownership of the signed-in account is not the same operation as signing in.
+    // `signIn(with:)` happily succeeds on a credential belonging to somebody else and swaps
+    // the session over to them; `reauthenticate(with:)` validates the credential against the
+    // current user, fails with `.userMismatch` otherwise, and never disturbs the session.
+    // Note it also does not change the current user, so no auth state listener will fire —
+    // callers must treat the callback itself as the terminal signal.
+
+    @Callable
+    func reauthenticate_with_apple(idToken: String, rawNonce: String, callback: Callable) {
+        let credential = OAuthProvider.credential(providerID: .apple, idToken: idToken, rawNonce: rawNonce)
+        reauthenticate(credential: credential, callback: callback)
+    }
+
+    @Callable
+    func reauthenticate_with_google(idToken: String, accessToken: String, callback: Callable) {
+        let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: accessToken)
+        reauthenticate(credential: credential, callback: callback)
+    }
+
+    private func reauthenticate(credential: AuthCredential, callback: Callable) {
+        guard let user = Auth.auth().currentUser else {
+            report(callback, false, credential.provider, "", "No user is signed in.")
+            return
+        }
+
+        user.reauthenticate(with: credential) { authResult, error in
+            if let error {
+                let nsError = error as NSError
+                if nsError.domain == AuthErrorDomain, nsError.code == AuthErrorCode.userMismatch.rawValue {
+                    self.report(callback, false, credential.provider, "user_mismatch", error.localizedDescription)
+                    return
+                }
+                self.report(callback, false, credential.provider, "", error.localizedDescription)
+                return
+            }
+            self.report(callback, true, authResult?.user.uid ?? user.uid, "", "")
+        }
+    }
+
+    private func report_link_error(_ error: Error, _ credential: AuthCredential, _ callback: Callable) {
+        let nsError = error as NSError
+        if nsError.domain == AuthErrorDomain &&
+           (nsError.code == AuthErrorCode.credentialAlreadyInUse.rawValue ||
+            nsError.code == AuthErrorCode.emailAlreadyInUse.rawValue) {
+            report(callback, false, credential.provider, "link_conflict", error.localizedDescription)
+            return
+        }
+        // Deliberately no sign-in fallback here: a transient link failure must not
+        // silently move the player onto a different account.
+        report(callback, false, credential.provider, "", error.localizedDescription)
+    }
+
     private func perform_standard_sign_in(credential: AuthCredential, callback: Callable) {
         Auth.auth().signIn(with: credential) { authResult, error in
             if let error = error {
                 let nsError = error as NSError
                 if nsError.domain == AuthErrorDomain && nsError.code == AuthErrorCode.userNotFound.rawValue {
-                    let _ = callback.callDeferred(Variant(false), Variant(credential.provider), Variant("user_not_found"), Variant(error.localizedDescription))
+                    self.report(callback, false, credential.provider, "user_not_found", error.localizedDescription)
                 } else {
-                    let _ = callback.callDeferred(Variant(false), Variant(credential.provider), Variant(""), Variant(error.localizedDescription))
+                    self.report(callback, false, credential.provider, "", error.localizedDescription)
                 }
             } else if let user = authResult?.user {
-                let uid = user.uid
-                let _ = callback.callDeferred(Variant(true), Variant(uid), Variant(""), Variant(""))
+                self.report(callback, true, user.uid, "", "")
             }
         }
     }
