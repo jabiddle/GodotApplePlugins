@@ -37,6 +37,13 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="cancel">
+			<return type="void" />
+			<description>
+				Abandons a request that is still in flight. Any callback that arrives afterwards is discarded,
+				so none of the three result signals will be raised for the cancelled request.
+			</description>
+		</method>
 		<method name="signin">
 			<return type="void" />
 			<description>
@@ -53,6 +60,16 @@
 				                success, or the [signal authorization_failed] on failure.
 			</description>
 		</method>
+		<method name="signin_with_scopes_and_nonce">
+			<return type="void" />
+			<param index="0" name="scopeStrings" type="Array" />
+			<param index="1" name="nonce" type="String" />
+			<description>
+				Same as [method signin_with_scopes], but also attaches a nonce to the request. Identity providers such as
+				Firebase require the SHA256 hash of a random string here, and then expect the original unhashed string when
+				the resulting identity token is exchanged.
+			</description>
+		</method>
 	</methods>
 	<signals>
 		<signal name="authorization_completed">
@@ -62,11 +79,19 @@
 				[param credential] is usually an [ASAuthorizationAppleIDCredential] or [ASPasswordCredential]. It can be null if the credential type is unsupported.
 			</description>
 		</signal>
+		<signal name="authorization_canceled">
+			<description>
+				Emitted when the user dismisses the system sheet instead of authorizing. This is a normal
+				outcome rather than an error, so it is reported separately from [signal authorization_failed].
+			</description>
+		</signal>
 		<signal name="authorization_failed">
 			<param index="0" name="message" type="String" />
 			<description>
 				Emitted when the authorization request fails.
-				[param error] contains the localized description of the error.
+				[param message] contains the [code]ASAuthorizationError[/code] code in square brackets followed by
+				the localized description, for example [code][1000] The operation couldn't be completed.[/code].
+				Code [code]1000[/code] usually means the [code]com.apple.developer.applesignin[/code] entitlement is missing.
 			</description>
 		</signal>
 	</signals>

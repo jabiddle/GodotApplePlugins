@@ -35,8 +35,10 @@ class ASWebAuthenticationSession: RefCounted, @unchecked Sendable {
         }
 #if canImport(UIKit)
         func presentationAnchor(for session: AuthenticationServices.ASWebAuthenticationSession) -> ASPresentationAnchor {
-            // Godot apps should have a key window. If not, return a new window (may not present correctly).
-            return UIApplication.shared.keyWindow ?? UIWindow(frame: .zero)
+            // Godot's iOS host is scene-based, so the legacy `keyWindow` lookup is nil here.
+            MainActor.assumeIsolated {
+                resolveAuthorizationAnchor() ?? UIWindow(frame: .zero)
+            }
         }
 #else
         private var fallbackWindow: NSWindow?
