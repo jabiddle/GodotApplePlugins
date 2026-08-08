@@ -3,266 +3,93 @@ import UIKit
 #elseif canImport(AppKit)
 import AppKit
 #endif
+import Foundation
 @preconcurrency import SwiftGodotRuntime
 
+/// GDScript-facing surface for quick actions, universal links and custom URL schemes.
+///
+/// This object owns no capture logic of its own. `DeepLinkService` registers with the host app
+/// delegate at extension init and pushes everything into `DeepLinkQueue`, which buffers until
+/// GDScript is listening. That split matters: payloads land during app launch, well before this
+/// `RefCounted` exists, and they must outlive it being released and re-created.
 @Godot
 class DeepLinkManager: RefCounted, @unchecked Sendable {
-    
+
     @Signal var quickActionReceived: SignalWithArguments<String>
     @Signal var universalLinkReceived: SignalWithArguments<String>
     @Signal var customUrlReceived: SignalWithArguments<String>
-    
-    nonisolated(unsafe) static var shared: DeepLinkManager?
-    
-    // Store pending actions for cold launches before GDScript connects to the signals
-    nonisolated(unsafe) static var pendingQuickAction: String?
-    nonisolated(unsafe) static var pendingUniversalLink: String?
-    nonisolated(unsafe) static var pendingCustomURL: String?
-    
+
     required init(_ context: InitContext) {
         super.init(context)
-        Self.shared = self
+        DeepLinkQueue.shared.attach(self)
     }
-    
-    static func setupEarly() {
-#if os(iOS)
-        let delegateClass: AnyClass? = {
-            if let delegate = UIApplication.shared.delegate {
-                return object_getClass(delegate)
-            }
-            return NSClassFromString("AppDelegate")
-        }()
-        guard let validClass = delegateClass else { return }
-        
-        swizzleQuickActions(delegateClass: validClass)
-        swizzleUniversalLinks(delegateClass: validClass)
-        swizzleCustomURLSchemes(delegateClass: validClass)
-#elseif os(macOS)
-        let delegateClass: AnyClass? = {
-            if let delegate = NSApplication.shared.delegate {
-                return object_getClass(delegate)
-            }
-            return NSClassFromString("AppDelegate")
-        }()
-        guard let validClass = delegateClass else { return }
-        
-        swizzleUniversalLinks(delegateClass: validClass)
-        swizzleCustomURLSchemes(delegateClass: validClass)
-#endif
+
+    deinit {
+        DeepLinkQueue.shared.detach(self)
     }
-    
-    // MARK: - Quick Actions
-    
-#if os(iOS)
-    private static func swizzleQuickActions(delegateClass: AnyClass) {
-        let originalSelector = #selector(UIApplicationDelegate.application(_:performActionFor:completionHandler:))
-        let originalMethod = class_getInstanceMethod(delegateClass, originalSelector)
-        
-        typealias PerformActionBlock = @convention(block) (AnyObject, UIApplication, UIApplicationShortcutItem, @escaping (Bool) -> Void) -> Void
-        
-        let block: PerformActionBlock = { (sself, app, shortcutItem, completionHandler) in
-            DeepLinkManager.handleQuickAction(shortcutItem.type)
-            
-            if let origMethod = originalMethod {
-                typealias OriginalFunction = @convention(c) (AnyObject, Selector, UIApplication, UIApplicationShortcutItem, @escaping (Bool) -> Void) -> Void
-                let imp = method_getImplementation(origMethod)
-                let originalCallable = unsafeBitCast(imp, to: OriginalFunction.self)
-                originalCallable(sself, originalSelector, app, shortcutItem, completionHandler)
-            } else {
-                completionHandler(true)
-            }
-        }
-        
-        let newImp = imp_implementationWithBlock(block)
-        
-        if let origMethod = originalMethod {
-            method_setImplementation(origMethod, newImp)
-        } else {
-            let types = "v@:@@@?" // void return, self, cmd, app, shortcut, block
-            class_addMethod(delegateClass, originalSelector, newImp, types)
-        }
-    }
-    
-    // MARK: - Universal Links
-    
-    private static func swizzleUniversalLinks(delegateClass: AnyClass) {
-        let originalSelector = #selector(UIApplicationDelegate.application(_:continue:restorationHandler:))
-        let originalMethod = class_getInstanceMethod(delegateClass, originalSelector)
-        
-        typealias ContinueActivityBlock = @convention(block) (AnyObject, UIApplication, NSUserActivity, @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool
-        
-        let block: ContinueActivityBlock = { (sself, app, userActivity, restorationHandler) in
-            var handled = false
-            
-            if userActivity.activityType == NSUserActivityTypeBrowsingWeb, let url = userActivity.webpageURL {
-                DeepLinkManager.handleUniversalLink(url.absoluteString)
-                handled = true
-            }
-            
-            if let origMethod = originalMethod {
-                typealias OriginalFunction = @convention(c) (AnyObject, Selector, UIApplication, NSUserActivity, @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool
-                let imp = method_getImplementation(origMethod)
-                let originalCallable = unsafeBitCast(imp, to: OriginalFunction.self)
-                let originalResult = originalCallable(sself, originalSelector, app, userActivity, restorationHandler)
-                return handled || originalResult
-            }
-            
-            return handled
-        }
-        
-        let newImp = imp_implementationWithBlock(block)
-        
-        if let origMethod = originalMethod {
-            method_setImplementation(origMethod, newImp)
-        } else {
-            let types = "c@:@@@?" // char (BOOL) return, self, cmd, app, userActivity, block
-            class_addMethod(delegateClass, originalSelector, newImp, types)
-        }
-    }
-    
-    // MARK: - Custom URL Schemes
-    
-    private static func swizzleCustomURLSchemes(delegateClass: AnyClass) {
-        let originalSelector = #selector(UIApplicationDelegate.application(_:open:options:))
-        let originalMethod = class_getInstanceMethod(delegateClass, originalSelector)
-        
-        typealias OpenURLBlock = @convention(block) (AnyObject, UIApplication, URL, [UIApplication.OpenURLOptionsKey : Any]) -> Bool
-        
-        let block: OpenURLBlock = { (sself, app, url, options) in
-            DeepLinkManager.handleCustomURL(url.absoluteString)
-            
-            if let origMethod = originalMethod {
-                typealias OriginalFunction = @convention(c) (AnyObject, Selector, UIApplication, URL, [UIApplication.OpenURLOptionsKey : Any]) -> Bool
-                let imp = method_getImplementation(origMethod)
-                let originalCallable = unsafeBitCast(imp, to: OriginalFunction.self)
-                let originalResult = originalCallable(sself, originalSelector, app, url, options)
-                return originalResult || true
-            }
-            
-            return true
-        }
-        
-        let newImp = imp_implementationWithBlock(block)
-        
-        if let origMethod = originalMethod {
-            method_setImplementation(origMethod, newImp)
-        } else {
-            let types = "c@:@@@" // char (BOOL) return, self, cmd, app, url, options
-            class_addMethod(delegateClass, originalSelector, newImp, types)
-        }
-    }
-#endif
-    
-#if os(macOS)
-    // MARK: - Universal Links (macOS)
-    
-    private static func swizzleUniversalLinks(delegateClass: AnyClass) {
-        let originalSelector = #selector(NSApplicationDelegate.application(_:continue:restorationHandler:))
-        let originalMethod = class_getInstanceMethod(delegateClass, originalSelector)
-        
-        typealias ContinueActivityBlock = @convention(block) (AnyObject, NSApplication, NSUserActivity, @escaping ([NSUserActivityRestoring]) -> Void) -> Bool
-        
-        let block: ContinueActivityBlock = { (sself, app, userActivity, restorationHandler) in
-            var handled = false
-            
-            if userActivity.activityType == NSUserActivityTypeBrowsingWeb, let url = userActivity.webpageURL {
-                DeepLinkManager.handleUniversalLink(url.absoluteString)
-                handled = true
-            }
-            
-            if let origMethod = originalMethod {
-                typealias OriginalFunction = @convention(c) (AnyObject, Selector, NSApplication, NSUserActivity, @escaping ([NSUserActivityRestoring]) -> Void) -> Bool
-                let imp = method_getImplementation(origMethod)
-                let originalCallable = unsafeBitCast(imp, to: OriginalFunction.self)
-                let originalResult = originalCallable(sself, originalSelector, app, userActivity, restorationHandler)
-                return handled || originalResult
-            }
-            
-            return handled
-        }
-        
-        let newImp = imp_implementationWithBlock(block)
-        
-        if let origMethod = originalMethod {
-            method_setImplementation(origMethod, newImp)
-        } else {
-            let types = "c@:@@@?" // char (BOOL) return, self, cmd, app, userActivity, block
-            class_addMethod(delegateClass, originalSelector, newImp, types)
-        }
-    }
-    
-    // MARK: - Custom URL Schemes (macOS)
-    
-    private static func swizzleCustomURLSchemes(delegateClass: AnyClass) {
-        let originalSelector = #selector(NSApplicationDelegate.application(_:open:))
-        let originalMethod = class_getInstanceMethod(delegateClass, originalSelector)
-        
-        typealias OpenURLBlock = @convention(block) (AnyObject, NSApplication, [URL]) -> Void
-        
-        let block: OpenURLBlock = { (sself, app, urls) in
-            for url in urls {
-                DeepLinkManager.handleCustomURL(url.absoluteString)
-            }
-            
-            if let origMethod = originalMethod {
-                typealias OriginalFunction = @convention(c) (AnyObject, Selector, NSApplication, [URL]) -> Void
-                let imp = method_getImplementation(origMethod)
-                let originalCallable = unsafeBitCast(imp, to: OriginalFunction.self)
-                originalCallable(sself, originalSelector, app, urls)
-            }
-        }
-        
-        let newImp = imp_implementationWithBlock(block)
-        
-        if let origMethod = originalMethod {
-            method_setImplementation(origMethod, newImp)
-        } else {
-            let types = "v@:@@" // void return, self, cmd, app, urls
-            class_addMethod(delegateClass, originalSelector, newImp, types)
-        }
-    }
-#endif
-    
+
     // MARK: - GDScript API
-    
+
+    /// Everything that arrived before GDScript was listening, oldest first, as a JSON array of
+    /// `{"kind": ..., "payload": ...}`.
+    ///
+    /// Preferred over the `check_pending_*` getters below, which cannot express ordering across
+    /// kinds and can only surface one payload per kind.
+    @Callable
+    func drain_pending() -> String {
+        let events = DeepLinkQueue.shared.drainPending()
+        let encoded = events.map { ["kind": $0.kind.rawValue, "payload": $0.payload] }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: encoded),
+              let json = String(data: data, encoding: .utf8)
+        else { return "[]" }
+
+        return json
+    }
+
+    /// Called by GDScript once its handlers are connected.
+    ///
+    /// Until this lands, every payload is buffered — the native object existing does not mean the
+    /// scene tree is listening — and anything that arrived in between is flushed here.
+    @Callable
+    func set_ready() {
+        DeepLinkQueue.shared.markReady()
+    }
+
+    /// Legacy one-shot getters, kept so the Android bridge's `has_method`/`has_signal` probes in
+    /// `native_bridge.gd` keep working unchanged. Prefer `drain_pending()`.
     @Callable
     func check_pending_quick_action() -> String {
-        let action = Self.pendingQuickAction ?? ""
-        Self.pendingQuickAction = nil
-        return action
+        return DeepLinkQueue.shared.drainFirst(.quickAction) ?? ""
     }
-    
+
     @Callable
     func check_pending_universal_link() -> String {
-        let link = Self.pendingUniversalLink ?? ""
-        Self.pendingUniversalLink = nil
-        return link
+        return DeepLinkQueue.shared.drainFirst(.universalLink) ?? ""
     }
-    
+
     @Callable
     func check_pending_custom_url() -> String {
-        let link = Self.pendingCustomURL ?? ""
-        Self.pendingCustomURL = nil
-        return link
+        return DeepLinkQueue.shared.drainFirst(.customURL) ?? ""
     }
-    
+
     @Callable
     func set_quick_actions(jsonArray: String) {
 #if os(iOS)
         guard let data = jsonArray.data(using: .utf8),
               let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
         else { return }
-        
+
         let shortcutItems: [UIApplicationShortcutItem] = items.compactMap { dict in
             guard let id = dict["id"] as? String, !id.isEmpty,
                   let title = dict["title"] as? String, !title.isEmpty
             else { return nil }
-            
+
             let subtitle = dict["subtitle"] as? String
             let iconKey = dict["icon"] as? String ?? ""
             let sfIcon = dict["sf_icon"] as? String ?? ""
             let icon = Self.resolveShortcutIcon(iconKey: iconKey, sfIcon: sfIcon)
-            
+
             return UIApplicationShortcutItem(
                 type: id,
                 localizedTitle: title,
@@ -271,14 +98,14 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
                 userInfo: nil
             )
         }
-        
+
         // UIApplication must be accessed on the main thread.
         DispatchQueue.main.async {
             UIApplication.shared.shortcutItems = shortcutItems
         }
 #endif
     }
-    
+
 #if os(iOS)
     /// Maps a platform-agnostic icon key string from GDScript to a native
     /// `UIApplicationShortcutIcon`. Prioritizes a custom bundled asset if available,
@@ -288,39 +115,29 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
         if !iconKey.isEmpty, UIImage(named: iconKey) != nil {
             return UIApplicationShortcutIcon(templateImageName: iconKey)
         }
-        
+
         // Fall back to Apple SF Symbol
         if !sfIcon.isEmpty {
             if #available(iOS 13.0, *) {
                 return UIApplicationShortcutIcon(systemImageName: sfIcon)
             }
         }
-        
+
         return nil
     }
 #endif
-    
-    static func handleQuickAction(_ type: String) {
-        if let shared = shared {
-            shared.quickActionReceived.emit(type)
-        } else {
-            pendingQuickAction = type
-        }
-    }
-    
-    static func handleUniversalLink(_ url: String) {
-        if let shared = shared {
-            shared.universalLinkReceived.emit(url)
-        } else {
-            pendingUniversalLink = url
-        }
-    }
-    
-    static func handleCustomURL(_ url: String) {
-        if let shared = shared {
-            shared.customUrlReceived.emit(url)
-        } else {
-            pendingCustomURL = url
+}
+
+extension DeepLinkManager: DeepLinkSink {
+
+    func deliverDeepLink(_ event: DeepLinkEvent) {
+        switch event.kind {
+        case .quickAction:
+            quickActionReceived.emit(event.payload)
+        case .universalLink:
+            universalLinkReceived.emit(event.payload)
+        case .customURL:
+            customUrlReceived.emit(event.payload)
         }
     }
 }

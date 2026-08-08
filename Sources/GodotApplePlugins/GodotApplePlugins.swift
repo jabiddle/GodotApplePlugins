@@ -109,6 +109,8 @@ import SwiftGodotRuntime
 
 public func pluginSetupHook(level: ExtensionInitializationLevel, isInit: Bool) {
     if isInit && level == .core {
-        DeepLinkManager.setupEarly()
+        // Runs inside `application:didFinishLaunchingWithOptions:` — before the scene connects,
+        // so this is in time for cold-launch quick actions and deep links.
+        DeepLinkService.register()
     }
 }
