@@ -57,6 +57,16 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
         DeepLinkQueue.shared.markReady()
     }
 
+    /// Lets GDScript write into the native trace.
+    ///
+    /// GDScript's own `print()` goes to stdout, which never reaches the unified log, so on a
+    /// device the GDScript half of the pipeline is invisible in Console. Routing it through here
+    /// puts both halves in one ordered trace.
+    @Callable
+    func log_note(message: String) {
+        DeepLinkLog.write("gd: \(message)")
+    }
+
     /// Everything the native side knows about itself, for diagnosing a release build on a device.
     ///
     /// Deep links only happen during launch on real hardware, so the useful evidence is long gone

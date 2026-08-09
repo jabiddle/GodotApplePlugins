@@ -23,10 +23,11 @@ enum DeepLinkLog {
         }
         lock.unlock()
 
-        // NSLog reaches Console.app on a device even for a release build; GD.print reaches the
-        // Godot output window and the remote debugger.
+        // NSLog alone is enough to reach Console.app on a device, even for a release build. Both
+        // NSLog and GD.print independently shim through the legacy ASL bridge, so calling both
+        // makes every line appear four times over (a default/info pair from each) with no
+        // difference in content — confusing, and easy to mistake for duplicate registration.
         NSLog("%@", line)
-        GD.print(line)
     }
 
     static func trace() -> [String] {
