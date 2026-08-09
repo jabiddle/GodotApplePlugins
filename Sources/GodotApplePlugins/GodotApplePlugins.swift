@@ -108,12 +108,6 @@ import SwiftGodotRuntime
 )
 
 public func pluginSetupHook(level: ExtensionInitializationLevel, isInit: Bool) {
-    // Logged for every level so the trace shows which ones actually fire. `#initSwiftExtension`
-    // does not pass `minimumInitializationLevel`, so SwiftGodot defaults it to `.scene`; the
-    // engine still drives every level from `.core` on first load, but that is worth confirming
-    // on-device rather than assuming.
-    DeepLinkLog.write("pluginSetupHook level=\(level) isInit=\(isInit)")
-
     if isInit && level == .core {
         // Runs inside `application:didFinishLaunchingWithOptions:` — before the scene connects,
         // so this is in time for cold-launch quick actions and deep links.

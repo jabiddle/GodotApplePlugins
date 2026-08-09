@@ -21,7 +21,6 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
 
     required init(_ context: InitContext) {
         super.init(context)
-        DeepLinkLog.write("DeepLinkManager instantiated by GDScript")
         DeepLinkQueue.shared.attach(self)
     }
 
@@ -55,43 +54,6 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
     @Callable
     func set_ready() {
         DeepLinkQueue.shared.markReady()
-    }
-
-    /// Lets GDScript write into the native trace.
-    ///
-    /// GDScript's own `print()` goes to stdout, which never reaches the unified log, so on a
-    /// device the GDScript half of the pipeline is invisible in Console. Routing it through here
-    /// puts both halves in one ordered trace.
-    @Callable
-    func log_note(message: String) {
-        DeepLinkLog.write("gd: \(message)")
-    }
-
-    /// Everything the native side knows about itself, for diagnosing a release build on a device.
-    ///
-    /// Deep links only happen during launch on real hardware, so the useful evidence is long gone
-    /// by the time any UI exists to ask for it. Returns JSON:
-    ///   `registration` — did the app delegate service actually register, and which selectors are
-    ///                    visible to the ObjC runtime
-    ///   `queue`        — whether a sink is attached and ready, and how deep the backlog is
-    ///   `trace`        — the ordered log of every pipeline event since launch
-    @Callable
-    func get_debug_state() -> String {
-        var registration = "unavailable on this platform"
-#if os(iOS) || os(macOS)
-        registration = DeepLinkService.registrationReport
-#endif
-        let state: [String: Any] = [
-            "registration": registration,
-            "queue": DeepLinkQueue.shared.stateDescription(),
-            "trace": DeepLinkLog.trace(),
-        ]
-
-        guard let data = try? JSONSerialization.data(withJSONObject: state),
-              let json = String(data: data, encoding: .utf8)
-        else { return "{}" }
-
-        return json
     }
 
     /// Legacy one-shot getters, kept so the Android bridge's `has_method`/`has_signal` probes in
@@ -169,7 +131,6 @@ class DeepLinkManager: RefCounted, @unchecked Sendable {
 extension DeepLinkManager: DeepLinkSink {
 
     func deliverDeepLink(_ event: DeepLinkEvent) {
-        DeepLinkLog.write("emitting \(event.kind.rawValue) '\(event.payload)' to GDScript")
         switch event.kind {
         case .quickAction:
             quickActionReceived.emit(event.payload)
