@@ -8,6 +8,9 @@
 import Foundation
 @preconcurrency import SwiftGodotRuntime
 import FirebaseAuth
+// `FirebaseAuth` does not re-export `FirebaseCore` (its only `@_exported` is
+// `FirebaseAuthInternal`), so naming `FirebaseApp` needs this explicitly.
+import FirebaseCore
 
 @Godot
 class FirebaseAuthManager: RefCounted, @unchecked Sendable {
@@ -277,6 +280,19 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
             if let error = error {
                 let _ = callback.callDeferred(Variant(false), Variant("delete_user"), Variant(""), Variant(error.localizedDescription))
             } else {
+                // ⚠️ Do not rely on `delete()` to sign this instance out. It ends in
+                // `try self.auth?.signOutByForce(withUserID: self.uid)`, and `User.auth` is a
+                // WEAK, `internal` back-pointer that `updateCurrentUser` does NOT reassign — so
+                // a `User` that reached us from another `FirebaseApp` instance (the holding
+                // slot below is one way that happens) still points at the instance that
+                // rehydrated it, not at the default one. `signOutByForce` then guards on
+                // `_currentUser?.uid == userID` against the WRONG instance, and the default one
+                // is left reporting a `currentUser` for a uid the server no longer has: this
+                // callback says success while `get_current_user_id()` keeps handing back a dead
+                // uid until some later token refresh fails. Device-only, silent, no log.
+                // Signing out explicitly is correct whether or not a user was ever held, so it
+                // is not conditional on that.
+                try? Auth.auth().signOut()
                 let _ = callback.callDeferred(Variant(true), Variant(""), Variant(""), Variant(""))
             }
         }
@@ -343,5 +359,157 @@ class FirebaseAuthManager: RefCounted, @unchecked Sendable {
                 let _ = callback.callDeferred(Variant(false), Variant("get_id_token"), Variant(""), Variant("Unknown error fetching ID token"))
             }
         }
+    }
+
+    // MARK: - Held User Slot
+    //
+    // Moves the signed-in `User` aside into a SECOND `FirebaseApp` instance and copies it back
+    // on demand, so a later sign-in that displaces it does not destroy the credential. That
+    // works because `Auth.saveUser` keys the keychain *account* field on
+    // "\(firebaseAppName)_firebase_user" — the held user is therefore a distinct keychain item
+    // and survives relaunch. (The keychain *service* is "firebase_auth_\(googleAppID)", which
+    // the two instances SHARE, since the holding app is configured from the default app's own
+    // options. The separation is the account field, not the service.)
+    //
+    // ⚠️ These four primitives decide NOTHING, deliberately. They hold whichever user is
+    // current, report what the slot contains, copy it back, and clear it. Whether a session is
+    // worth holding, whether restoring beats a fresh sign-in, and how long a held credential
+    // stays valid are policy questions this class cannot answer — it has no clock and no
+    // storage of its own — and a caller running the same policy against a non-Apple backend
+    // cannot see a conditional written here. Keep those decisions in the calling code.
+
+    /// Name of the `FirebaseApp` that owns the holding slot.
+    ///
+    /// ⚠️ It is part of the on-device contract rather than an implementation detail: it becomes
+    /// the keychain account field, so changing it orphans whatever a previous build held.
+    /// `FirebaseApp.configure(name:options:)` rejects anything outside alphanumerics, `-` and
+    /// `_` with an exception, so keep it plain.
+    private static let heldUserAppName = "GodotApplePluginsHeldUser"
+
+    /// The `Auth` instance for the holding app, configuring that app on first use.
+    ///
+    /// ⚠️ Idempotency has to be this `app(name:)` guard, and cannot be a `try`/`catch`.
+    /// Configuring a name twice reaches `FIRApp.appWasConfiguredTwice`, which for a
+    /// non-extension process raises an **NSException** — uncatchable from Swift, so a second
+    /// `configure` is a hard crash, not a recoverable error. That holds even when the options
+    /// are identical; the "ignore the duplicate" path is gated on `isAppExtension`. This
+    /// mirrors how `FirebaseCoreManager.initialize()` guards the default app.
+    ///
+    /// Returns `nil` only when the default app is not configured yet, i.e.
+    /// `FirebaseCoreManager.initialize()` has not run. `FirebaseApp.app(name:)` logs
+    /// `I-COR000004` on the miss that precedes the first configure — expected once per process,
+    /// not an error.
+    ///
+    /// 🔴 Never call `deleteApp` on this app. A dozen `User` methods reach through the weak
+    /// `User.auth` back-pointer under `guard ... else { fatalError() }`, so tearing the
+    /// instance down while a `User` still points at it is a crash, not an error.
+    private static func heldUserAuth() -> Auth? {
+        if let existing = FirebaseApp.app(name: heldUserAppName) {
+            return Auth.auth(app: existing)
+        }
+        guard let options = FirebaseApp.app()?.options else {
+            return nil
+        }
+        FirebaseApp.configure(name: heldUserAppName, options: options)
+        guard let configured = FirebaseApp.app(name: heldUserAppName) else {
+            return nil
+        }
+        return Auth.auth(app: configured)
+    }
+
+    /// Copies the signed-in user into the holding slot. Resolves `(true, uid, "", "")`.
+    ///
+    /// Holds whichever user is current, with no eligibility test — see the ⚠️ above. A caller
+    /// that only wants some sessions held has to decide that before calling, and has to compare
+    /// the uid it held against the uid it ends up signed in as afterwards: this can only copy
+    /// whatever `currentUser` is at the moment it runs.
+    ///
+    /// `updateCurrentUser` COPIES rather than moves: it only makes a `reload` round trip when
+    /// the two `requestConfiguration.apiKey`s differ, and they cannot differ here because the
+    /// holding app is configured from the default app's own options — so it takes the unchecked
+    /// branch and never clears the source. The user is therefore not transiently signed out,
+    /// and no auth-state event fires on the default instance; the listener `start_auth_listener`
+    /// installs is bound to that instance with `object: self` and is structurally deaf to this
+    /// one either way.
+    @Callable
+    func hold_current_user(callback: Callable) {
+        guard let holding = Self.heldUserAuth() else {
+            report(callback, false, "hold_current_user", "", "Firebase is not configured.")
+            return
+        }
+        guard let user = Auth.auth().currentUser else {
+            report(callback, false, "hold_current_user", "", "No user is signed in.")
+            return
+        }
+        holding.updateCurrentUser(user) { error in
+            if let error {
+                self.report(callback, false, "hold_current_user", "", error.localizedDescription)
+                return
+            }
+            self.report(callback, true, user.uid, "", "")
+        }
+    }
+
+    /// The uid currently held, or `""` when the slot is empty.
+    ///
+    /// Honest on the first call after launch despite the holding instance rehydrating from the
+    /// keychain asynchronously: `Auth.protectedDataInitialization` enqueues that load with
+    /// `kAuthGlobalWorkQueue.async` during `init`, and `currentUser` reads back through
+    /// `kAuthGlobalWorkQueue.sync`. That queue is serial, so FIFO ordering puts this read behind
+    /// the load that was already queued before `heldUserAuth()` returned.
+    @Callable func get_held_user_id() -> String {
+        return Self.heldUserAuth()?.currentUser?.uid ?? ""
+    }
+
+    /// Copies the held user back into the default instance. Resolves `(true, uid, "", "")`.
+    ///
+    /// An empty slot resolves as a failure carrying payload `"no_slot"`, so a caller can tell
+    /// "nothing was held" apart from "the copy failed". That is a report of what the slot
+    /// contains, not a decision about what to do about it.
+    ///
+    /// 🔴 SUCCESS HERE IS OPTIMISTIC, and a caller that needs certainty has to add its own
+    /// check. `updateCurrentUser` only makes a `reload` round trip when the two instances' API
+    /// keys DIFFER, and they never do here, so the copy takes the unchecked branch and never
+    /// asks the server whether the account still exists. A deleted, disabled or server-side
+    /// purged account therefore restores "successfully" and surfaces much later as some
+    /// unrelated token refresh failing. A forced `get_id_token(forceRefresh: true)` is the
+    /// cheapest call that makes the server adjudicate the restored account.
+    ///
+    /// ⚠️ The restored `User`'s weak `auth` back-pointer still names whichever instance
+    /// rehydrated it; `updateCurrentUser` does not reassign it and it is `internal`, so it
+    /// cannot be corrected from here. `delete_current_user` compensates by signing out
+    /// explicitly rather than trusting the SDK's internal `signOutByForce`.
+    @Callable
+    func restore_held_user(callback: Callable) {
+        guard let holding = Self.heldUserAuth() else {
+            report(callback, false, "restore_held_user", "", "Firebase is not configured.")
+            return
+        }
+        guard let user = holding.currentUser else {
+            report(callback, false, "restore_held_user", "no_slot", "No user is being held.")
+            return
+        }
+        Auth.auth().updateCurrentUser(user) { error in
+            if let error {
+                self.report(callback, false, "restore_held_user", "", error.localizedDescription)
+                return
+            }
+            self.report(callback, true, user.uid, "", "")
+        }
+    }
+
+    /// Clears the holding slot. Best-effort and synchronous, mirroring `sign_out()`.
+    ///
+    /// ⚠️ On a keychain fault this leaves the slot INTACT rather than half-cleared: `signOut`
+    /// routes through `updateCurrentUser(nil, byForce: false, ...)`, and `byForce: false` means
+    /// the in-memory user is dropped only once the keychain write actually succeeded. So the
+    /// failure is recoverable, but it is silent here — `get_held_user_id()` still returning a
+    /// uid afterwards is how the caller detects it.
+    @Callable
+    func clear_held_user() {
+        guard let holding = Self.heldUserAuth() else {
+            return
+        }
+        try? holding.signOut()
     }
 }
