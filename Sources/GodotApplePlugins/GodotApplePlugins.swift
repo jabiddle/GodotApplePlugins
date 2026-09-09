@@ -76,6 +76,7 @@ import SwiftGodotRuntime
         
         LiveActivityManager.self,
         DeepLinkManager.self,
+        NotificationManager.self,
     ],
     enums: [
         AVAudioSession.CategoryOptions.self,
@@ -110,7 +111,9 @@ import SwiftGodotRuntime
 public func pluginSetupHook(level: ExtensionInitializationLevel, isInit: Bool) {
     if isInit && level == .core {
         // Runs inside `application:didFinishLaunchingWithOptions:` — before the scene connects,
-        // so this is in time for cold-launch quick actions and deep links.
+        // so this is in time for cold-launch quick actions, deep links and the notification that
+        // launched the app. A notification delegate assigned any later never sees that one.
         DeepLinkService.register()
+        NotificationCenterService.register()
     }
 }
