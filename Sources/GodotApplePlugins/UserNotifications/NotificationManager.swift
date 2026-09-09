@@ -179,7 +179,11 @@ class NotificationManager: RefCounted, @unchecked Sendable {
 #if os(iOS)
         let identifiers = (NotificationJSON.array(from: ids_json) ?? []).compactMap { $0 as? String }
         guard !identifiers.isEmpty else { return }
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
+        // A posted notification (`post_now`) is already delivered, and its cancellation on foreground
+        // is the success case the caller relies on, so both stores are cleared, never only pending.
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
 #endif
     }
 
