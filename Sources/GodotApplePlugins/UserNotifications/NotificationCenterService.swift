@@ -327,9 +327,16 @@ final class NotificationCenterService: NSObject, UNUserNotificationCenterDelegat
 
     // MARK: - UNUserNotificationCenterDelegate
 
+    // Both callbacks are `nonisolated` because this class also conforms to UIApplicationDelegate,
+    // which is @MainActor: conforming to a globally isolated protocol infers that isolation for
+    // the whole type, and a main-actor method cannot satisfy these nonisolated requirements. The
+    // package builds in the Swift 6 language mode, so that mismatch is an error, not a warning.
+    // Neither body touches main-actor state -- the payload types and the event queue are Sendable
+    // -- so dropping the isolation costs nothing here and re-adding it breaks the build.
+
     /// The pipeline decides whether a notification may show while the app is in front; this only
     /// enforces the answer already recorded on the request.
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
@@ -347,7 +354,7 @@ final class NotificationCenterService: NSObject, UNUserNotificationCenterDelegat
         completionHandler(options)
     }
 
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
