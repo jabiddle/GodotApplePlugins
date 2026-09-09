@@ -20,7 +20,9 @@ class NotificationManager: RefCounted, @unchecked Sendable {
     @Signal("state") var authorization_changed: SignalWithArguments<String>
     @Signal("json") var notification_opened: SignalWithArguments<String>
     @Signal("json") var notification_action: SignalWithArguments<String>
-    @Signal("token") var push_token_updated: SignalWithArguments<String>
+    /// The raw APNs device token, never a messaging service's registration token — a host that
+    /// treats the two as interchangeable addresses one of them at a service that refuses it.
+    @Signal("token") var apns_token_updated: SignalWithArguments<String>
 
     /// Emitted by the Android plugin only — this platform has no exact-alarm permission and no
     /// `can_schedule_exact()`. Declared so the surface carries the same member names on both.
@@ -404,6 +406,6 @@ extension NotificationManager: NotificationEventSink {
     }
 
     func deliverPushToken(_ token: String) {
-        push_token_updated.emit(token)
+        apns_token_updated.emit(token)
     }
 }
