@@ -71,6 +71,7 @@ import SwiftGodotRuntime
         FirebaseAuthManager.self,
         FirebaseFirestoreManager.self,
         FirebaseStorageManager.self,
+        FirebaseMessagingManager.self,
 
         GoogleSignInManager.self,
         

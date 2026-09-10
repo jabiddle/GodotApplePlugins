@@ -207,6 +207,112 @@ final class NotificationEventQueue: @unchecked Sendable {
     }
 }
 
+/// One relayed message on its way to whichever object owns the messaging service. `userInfo`
+/// travels as-is: which of its keys are the sender's is the transport's contract, not this file's.
+struct RemoteNotificationEvent: @unchecked Sendable {
+
+    enum Arrival: Sendable {
+        case foreground
+        case opened
+    }
+
+    let arrival: Arrival
+    let userInfo: [AnyHashable: Any]
+    /// Recorded at arrival because a replay cannot recover it afterwards.
+    let coldLaunch: Bool
+}
+
+protocol RemoteNotificationSink: AnyObject, Sendable {
+    func deliverDeviceToken(_ token: Data)
+    func deliverRemoteNotification(_ event: RemoteNotificationEvent)
+}
+
+/// The seam holding the notification centre and a messaging service apart: this half must keep
+/// working when push does not, so it learns nothing of the transport beyond the one key below.
+final class RemoteNotificationRelay: @unchecked Sendable {
+
+    static let shared = RemoteNotificationRelay()
+
+    private static let maxBuffered = 16
+
+    /// Stamped by the transport and unwritable here, so it tells relayed from locally scheduled.
+    private static let transportMessageIdKey = "gcm.message_id"
+
+    private let lock = NSLock()
+    private var buffered: [RemoteNotificationEvent] = []
+    private var deviceToken: Data?
+    private weak var sink: (any RemoteNotificationSink)?
+
+    static func isRemote(_ userInfo: [AnyHashable: Any]) -> Bool {
+        return userInfo[transportMessageIdKey] != nil
+    }
+
+    /// The token is a level and not an edge, so it is retained and replayed rather than consumed.
+    func post(deviceToken token: Data) {
+        lock.lock()
+        deviceToken = token
+        let target = sink
+        lock.unlock()
+
+        if let target {
+            NotificationEventQueue.onMain { target.deliverDeviceToken(token) }
+        }
+    }
+
+    func post(_ arrival: RemoteNotificationEvent.Arrival, userInfo: [AnyHashable: Any]) {
+        lock.lock()
+        let target = sink
+        let event = RemoteNotificationEvent(
+            arrival: arrival,
+            userInfo: userInfo,
+            coldLaunch: target == nil
+        )
+        if target == nil {
+            buffered.append(event)
+            if buffered.count > Self.maxBuffered {
+                buffered.removeFirst(buffered.count - Self.maxBuffered)
+            }
+        }
+        lock.unlock()
+
+        if let target {
+            NotificationEventQueue.onMain { target.deliverRemoteNotification(event) }
+        }
+    }
+
+    /// ⚠️ The replay is deferred a full turn of the main loop, never inline: this runs from the
+    /// subscriber's own initialiser, whose caller has connected nothing to it yet, so an inline
+    /// emit reaches nobody and the event is gone. `set_ready()` is the local surface's answer to
+    /// that window; this seam has none, so the hop stands in for it.
+    func attach(_ newSink: any RemoteNotificationSink) {
+        lock.lock()
+        sink = newSink
+        let pending = buffered
+        let token = deviceToken
+        buffered.removeAll()
+        lock.unlock()
+
+        guard !pending.isEmpty || token != nil else { return }
+        DispatchQueue.main.async { [weak newSink] in
+            guard let newSink else { return }
+            if let token {
+                newSink.deliverDeviceToken(token)
+            }
+            for event in pending {
+                newSink.deliverRemoteNotification(event)
+            }
+        }
+    }
+
+    func detach(_ oldSink: any RemoteNotificationSink) {
+        lock.lock()
+        if sink == nil || sink === oldSink {
+            sink = nil
+        }
+        lock.unlock()
+    }
+}
+
 #if os(iOS)
 
 /// Owns `UNUserNotificationCenter.current().delegate` and the APNs registration callbacks. Both
@@ -302,9 +408,12 @@ final class NotificationCenterService: NSObject, UNUserNotificationCenterDelegat
         return installed
     }
 
+    /// ⚠️ Two consumers, two representations, neither substitutable: GDScript gets hex text, a
+    /// messaging service the raw bytes. The wrong form is accepted in silence and addresses nobody.
     private static func ingest(deviceToken: Data) {
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
         NotificationEventQueue.shared.enqueueToken(hex)
+        RemoteNotificationRelay.shared.post(deviceToken: deviceToken)
     }
 
     private static func report(registrationError: Error) {
@@ -342,6 +451,11 @@ final class NotificationCenterService: NSObject, UNUserNotificationCenterDelegat
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let userInfo = notification.request.content.userInfo
+        if RemoteNotificationRelay.isRemote(userInfo) {
+            RemoteNotificationRelay.shared.post(.foreground, userInfo: userInfo)
+        }
+
+        // A relayed message carries no `present_in_foreground`, so it shows nothing here by design.
         guard userInfo[NotificationUserInfoKey.presentInForeground] as? Bool == true else {
             completionHandler([])
             return
@@ -365,7 +479,15 @@ final class NotificationCenterService: NSObject, UNUserNotificationCenterDelegat
         // A swipe-away is not an open, and routing it would foreground the app the user dismissed.
         guard identifier != UNNotificationDismissActionIdentifier else { return }
 
-        let payload = NotificationJSON.payloadString(from: response.notification.request.content.userInfo)
+        let userInfo = response.notification.request.content.userInfo
+        // Routed to the relay instead: flat transport keys rather than the single `payload` this
+        // file writes, and an open owing a cold-launch bit the local queue cannot hold.
+        if RemoteNotificationRelay.isRemote(userInfo) {
+            RemoteNotificationRelay.shared.post(.opened, userInfo: userInfo)
+            return
+        }
+
+        let payload = NotificationJSON.payloadString(from: userInfo)
         let event = identifier == UNNotificationDefaultActionIdentifier
             ? NotificationOpenEvent(kind: .open, actionId: "", payloadJSON: payload)
             : NotificationOpenEvent(kind: .action, actionId: identifier, payloadJSON: payload)
