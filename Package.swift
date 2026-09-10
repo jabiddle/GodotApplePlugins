@@ -12,7 +12,10 @@ let swiftSettings: [SwiftSetting] = [
 ]
 
 let linkerSettings: [LinkerSetting] = [
-    .unsafeFlags(["-Xlinker", "-dead_strip"])
+    // -ObjC: FirebaseAnalytics requires it (firebase-ios-sdk SwiftPackageManager.md). Without it the
+    // linker drops any static-archive object file that holds only an Objective-C category, and the
+    // first call into one is an unrecognized-selector abort on com.google.fira.worker at runtime.
+    .unsafeFlags(["-Xlinker", "-ObjC", "-Xlinker", "-dead_strip"])
 ]
 
 let package = Package(
