@@ -59,6 +59,9 @@ import SwiftGodotRuntime
         SubscriptionStoreView.self,
 
         AppleFilePicker.self,
+        UIImpactFeedbackGenerator.self,
+        UINotificationFeedbackGenerator.self,
+        UISelectionFeedbackGenerator.self,
 
         ASAuthorizationAppleIDCredential.self,
         ASPasswordCredential.self,
