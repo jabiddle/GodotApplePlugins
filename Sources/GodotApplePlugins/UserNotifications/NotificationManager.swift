@@ -35,7 +35,7 @@ class NotificationManager: RefCounted, @unchecked Sendable {
     /// and a request whose instant has already passed is a normal outcome of a slow rebuild.
     private static let minimumInterval: TimeInterval = 1.0
 
-    /// `UNUserNotificationCenter` answers only asynchronously, but two members of this surface are
+    /// `UNUserNotificationCenter` answers only asynchronously, but three members of this surface are
     /// synchronous by contract. The completion handlers run on the framework's own queue, never on
     /// the caller's, so waiting here cannot deadlock; the bound is what keeps a changed assumption
     /// from becoming a frozen app.
@@ -201,6 +201,29 @@ class NotificationManager: RefCounted, @unchecked Sendable {
 
         guard semaphore.wait(timeout: .now() + Self.readTimeout) == .success else {
             NSLog("NotificationManager: getPendingNotificationRequests timed out; reporting none pending.")
+            return "[]"
+        }
+
+        return NotificationJSON.encode(result.current) ?? "[]"
+#else
+        return "[]"
+#endif
+    }
+
+    /// Identifiers of this app's notifications still shown in Notification Center, a remote one's
+    /// being its `apns-collapse-id`. `cancel` already removes delivered notifications by the same id.
+    @Callable
+    func list_delivered() -> String {
+#if os(iOS)
+        let result = NotificationBox<[String]>([])
+        let semaphore = DispatchSemaphore(value: 0)
+        UNUserNotificationCenter.current().getDeliveredNotifications { notifications in
+            result.set(notifications.map { $0.request.identifier })
+            semaphore.signal()
+        }
+
+        guard semaphore.wait(timeout: .now() + Self.readTimeout) == .success else {
+            NSLog("NotificationManager: getDeliveredNotifications timed out; reporting none delivered.")
             return "[]"
         }
 
