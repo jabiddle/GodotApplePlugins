@@ -221,7 +221,8 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
                 return
             }
             let metadata = VariantDictionary()
-            metadata[Variant("from_cache")] = Variant(documentSnapshot?.metadata.isFromCache ?? false)
+            // An absent snapshot proves nothing, so it reads as cached: a caller treats "served" as the claim.
+            metadata[Variant("from_cache")] = Variant(documentSnapshot?.metadata.isFromCache ?? true)
             metadata[Variant("has_pending_writes")] = Variant(documentSnapshot?.metadata.hasPendingWrites ?? false)
             metadata[Variant("exists")] = Variant(documentSnapshot?.exists ?? false)
             if let documentSnapshot = documentSnapshot, documentSnapshot.exists, let data = documentSnapshot.data() {
