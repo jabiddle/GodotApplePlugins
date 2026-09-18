@@ -281,6 +281,15 @@ class NotificationManager: RefCounted, @unchecked Sendable {
         return TimeZone.current.identifier
     }
 
+    /// The "j" skeleton resolves to the hour symbol the user's clock uses, and `Locale.current`
+    /// carries the Settings 24-Hour Time toggle, so the pattern holds an "a" (the day period)
+    /// exactly when the clock is 12-hour.
+    @Callable
+    func uses_24_hour_clock() -> Bool {
+        let pattern = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: Locale.current) ?? ""
+        return !pattern.contains("a")
+    }
+
     // MARK: - Launch handshake
 
     /// Everything that arrived before GDScript was listening, oldest first, as a JSON array of
