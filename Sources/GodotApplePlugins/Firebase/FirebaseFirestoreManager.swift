@@ -203,6 +203,41 @@ class FirebaseFirestoreManager: RefCounted, @unchecked Sendable {
         return listenerId
     }
     
+    /// `listen_to_document` with the snapshot's own metadata forwarded as a seventh argument
+    /// (`from_cache`, `has_pending_writes`, `exists`; empty on an `error` event).
+    ///
+    /// Registered with `includeMetadataChanges: true` because a server confirmation carrying data
+    /// identical to the cached copy raises no second event otherwise: `from_cache` would stay true
+    /// for the whole life of a document nobody wrote to, and a caller that waits for it to flip
+    /// would treat that document as offline for ever.
+    @Callable
+    func listen_to_document_with_metadata(collection: String, document: String, callback: Callable) -> String {
+        let listenerId = UUID().uuidString
+        let db = Firestore.firestore()
+        let listener = db.collection(collection).document(document).addSnapshotListener(includeMetadataChanges: true) { (documentSnapshot, error) in
+            if let error = error {
+                let errorDesc = error.localizedDescription
+                let _ = callback.callDeferred(Variant("error"), Variant(false), Variant(collection), Variant(document), Variant(VariantDictionary()), Variant(errorDesc), Variant(VariantDictionary()))
+                return
+            }
+            let metadata = VariantDictionary()
+            metadata[Variant("from_cache")] = Variant(documentSnapshot?.metadata.isFromCache ?? false)
+            metadata[Variant("has_pending_writes")] = Variant(documentSnapshot?.metadata.hasPendingWrites ?? false)
+            metadata[Variant("exists")] = Variant(documentSnapshot?.exists ?? false)
+            if let documentSnapshot = documentSnapshot, documentSnapshot.exists, let data = documentSnapshot.data() {
+                let gDict = VariantDictionary()
+                for (key, value) in data {
+                    gDict[Variant(key)] = FirebaseVariantConverter.anyToVariant(value)
+                }
+                let _ = callback.callDeferred(Variant("snapshot"), Variant(true), Variant(collection), Variant(document), Variant(gDict), Variant(""), Variant(metadata))
+            } else {
+                let _ = callback.callDeferred(Variant("snapshot"), Variant(true), Variant(collection), Variant(document), Variant(VariantDictionary()), Variant(""), Variant(metadata))
+            }
+        }
+        activeListeners[listenerId] = listener
+        return listenerId
+    }
+
     @Callable
     func listen_to_collection(collection: String, callback: Callable) -> String {
         let listenerId = UUID().uuidString
