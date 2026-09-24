@@ -1,6 +1,7 @@
 import Foundation
 #if os(iOS)
 import ActivityKit
+import WidgetKit
 #endif
 @preconcurrency import SwiftGodotRuntime
 
@@ -87,5 +88,44 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
             }
         }
 #endif
+    }
+
+    /// The `UserDefaults` key, in the App Group container, that a widget extension reads.
+    static let widgetStateKey = "widget_state"
+
+    /// Stores `stateJson` verbatim for the app's widgets and reloads their timelines. Answers ""
+    /// when written, else why not; the caller owns every key inside the object.
+    @Callable
+    func set_widget_state(stateJson: String) -> String {
+        guard let data = stateJson.data(using: .utf8),
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else {
+            return "The widget state is not a JSON object."
+        }
+#if os(iOS)
+        guard let group = LiveActivityManager.appGroupIdentifier(bundleIdentifier: Bundle.main.bundleIdentifier),
+              FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) != nil,
+              let defaults = UserDefaults(suiteName: group) else {
+            // Without the entitlement UserDefaults(suiteName:) still answers, into a private
+            // store no extension can open, so the container is the test.
+            return "This app is not entitled to the App Group its widgets read."
+        }
+        defaults.set(stateJson, forKey: LiveActivityManager.widgetStateKey)
+        Task { @MainActor in
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+        return ""
+#else
+        return "Home-screen widgets are not available on this platform."
+#endif
+    }
+
+    /// The host's App Group: its bundle identifier with the first component replaced by `group`.
+    /// A widget extension must derive the same container from the same identifier.
+    static func appGroupIdentifier(bundleIdentifier: String?) -> String? {
+        guard let identifier = bundleIdentifier, let dot = identifier.firstIndex(of: "."),
+              identifier.index(after: dot) < identifier.endIndex else {
+            return nil
+        }
+        return "group" + identifier[dot...]
     }
 }
