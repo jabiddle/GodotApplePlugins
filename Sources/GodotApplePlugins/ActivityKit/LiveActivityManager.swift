@@ -12,10 +12,16 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
         super.init(context)
     }
 
+    /// Replaces every activity of this type the app already holds. `request` always adds one, and an
+    /// activity outlives the process that started it, so one whose process died before ending it
+    /// would otherwise stay on the Lock Screen beside the new one, taking every later update too.
     @Callable
     func start_activity(attributesJson: String, stateJson: String, staleDateEpoch: Double) -> Variant? {
 #if os(iOS)
         if #available(iOS 16.1, *) {
+            // Read before the request, so the activity it creates is never among them.
+            endActivities(ids: Activity<GenericLiveActivityAttributes>.activities.map { $0.id }, stateJson: nil, staleDateEpoch: -1)
+
             guard ActivityAuthorizationInfo().areActivitiesEnabled else {
                 return Variant("Live Activities are not enabled.")
             }
@@ -69,23 +75,13 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
 #endif
     }
 
+    /// Ends the activities that exist when it is called, never one a later `start_activity` makes
+    /// while this is still running.
     @Callable
     func end_activity(stateJson: String, staleDateEpoch: Double) {
 #if os(iOS)
         if #available(iOS 16.1, *) {
-            Task {
-                for activity in Activity<GenericLiveActivityAttributes>.activities {
-                    let newState = GenericLiveActivityAttributes.ContentState(stateJson: stateJson)
-                    
-                    if #available(iOS 16.2, *) {
-                        let staleDate = staleDateEpoch > 0 ? Date(timeIntervalSince1970: staleDateEpoch) : nil
-                        let content = ActivityContent(state: newState, staleDate: staleDate)
-                        await activity.end(content, dismissalPolicy: .immediate)
-                    } else {
-                        await activity.end(using: newState, dismissalPolicy: .immediate)
-                    }
-                }
-            }
+            endActivities(ids: Activity<GenericLiveActivityAttributes>.activities.map { $0.id }, stateJson: stateJson, staleDateEpoch: staleDateEpoch)
         }
 #endif
     }
@@ -115,3 +111,30 @@ class LiveActivityManager: RefCounted, @unchecked Sendable {
 #endif
     }
 }
+
+#if os(iOS)
+/// Ids rather than activities cross into the task, because an id is `Sendable`; a nil state
+/// ends each activity on the content it last showed.
+private func endActivities(ids: [String], stateJson: String?, staleDateEpoch: Double) {
+    if ids.isEmpty {
+        return
+    }
+    Task {
+        for activity in Activity<GenericLiveActivityAttributes>.activities where ids.contains(activity.id) {
+            guard let stateJson else {
+                await activity.end(nil, dismissalPolicy: .immediate)
+                continue
+            }
+            let newState = GenericLiveActivityAttributes.ContentState(stateJson: stateJson)
+
+            if #available(iOS 16.2, *) {
+                let staleDate = staleDateEpoch > 0 ? Date(timeIntervalSince1970: staleDateEpoch) : nil
+                let content = ActivityContent(state: newState, staleDate: staleDate)
+                await activity.end(content, dismissalPolicy: .immediate)
+            } else {
+                await activity.end(using: newState, dismissalPolicy: .immediate)
+            }
+        }
+    }
+}
+#endif
