@@ -23,19 +23,24 @@ class CHHapticEngine: RefCounted, @unchecked Sendable {
     func create() -> Variant? {
         do {
             engine = try CoreHaptics.CHHapticEngine()
-            
-            engine?.stoppedHandler = { reason in
-                MainActor.assumeIsolated {
-                    _ = self.stopped.emit(reason.rawValue)
+
+            // Core Haptics calls both handlers on a queue of its own, never the main thread,
+            // so asserting main-actor isolation here traps the first time the engine stops.
+            engine?.stoppedHandler = { [weak self] reason in
+                let rawReason = reason.rawValue
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    _ = self.stopped.emit(rawReason)
                 }
             }
-            
-            engine?.resetHandler = {
-                MainActor.assumeIsolated {
+
+            engine?.resetHandler = { [weak self] in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
                     _ = self.reset.emit()
                 }
             }
-            
+
             return nil
         } catch {
             return CHHapticError.from(error)
@@ -71,17 +76,22 @@ class CHHapticEngine: RefCounted, @unchecked Sendable {
         engine?.currentTime ?? 0.0
     }
 
+    // The completion handlers arrive off the main thread too; hop back before touching Godot.
     @Callable
     func start(callback: Callable) {
         engine?.start { error in
-            _ = callback.call(CHHapticError.from(error))
+            DispatchQueue.main.async {
+                _ = callback.call(CHHapticError.from(error))
+            }
         }
     }
 
     @Callable
     func stop(callback: Callable) {
         engine?.stop { error in
-            _ = callback.call(CHHapticError.from(error))
+            DispatchQueue.main.async {
+                _ = callback.call(CHHapticError.from(error))
+            }
         }
     }
 
