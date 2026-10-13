@@ -59,6 +59,7 @@ import SwiftGodotRuntime
         SubscriptionStoreView.self,
 
         AppleFilePicker.self,
+        ShareSheet.self,
         UIImpactFeedbackGenerator.self,
         UINotificationFeedbackGenerator.self,
         UISelectionFeedbackGenerator.self,
@@ -119,5 +120,6 @@ public func pluginSetupHook(level: ExtensionInitializationLevel, isInit: Bool) {
         // launched the app. A notification delegate assigned any later never sees that one.
         DeepLinkService.register()
         NotificationCenterService.register()
+        RemoteNotificationRelay.shared.install(performer: FirebaseRemoteActionPerformer.shared)
     }
 }

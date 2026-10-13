@@ -227,6 +227,145 @@ protocol RemoteNotificationSink: AnyObject, Sendable {
     func deliverRemoteNotification(_ event: RemoteNotificationEvent)
 }
 
+/// One action button's request on a remote notification, as the sender's `background_actions`
+/// names it: a path under the endpoint the host registered, and a JSON body posted verbatim.
+/// Nothing here knows what the request does.
+struct RemoteActionRequest: Sendable {
+
+    static let actionsKey = "background_actions"
+
+    private static let pathCharacters = CharacterSet(
+        charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+    )
+
+    let actionId: String
+    let path: String
+    let bodyJSON: String
+    /// The sender's string values without the requests, for the outcome log.
+    let payload: [String: String]
+
+    static func from(userInfo: [AnyHashable: Any], actionId: String) -> RemoteActionRequest? {
+        guard let raw = userInfo[actionsKey] as? String,
+              let actions = NotificationJSON.object(from: raw),
+              let request = actions[actionId] as? [String: Any],
+              let path = request["path"] as? String, !path.isEmpty,
+              let body = request["body"] as? [String: Any],
+              let bodyJSON = NotificationJSON.encode(body)
+        else { return nil }
+
+        var payload: [String: String] = [:]
+        for (rawKey, value) in userInfo {
+            guard let key = rawKey as? String, let text = value as? String,
+                  key != actionsKey, !key.hasPrefix("gcm."), !key.hasPrefix("google.")
+            else { continue }
+            payload[key] = text
+        }
+        return RemoteActionRequest(actionId: actionId, path: path, bodyJSON: bodyJSON, payload: payload)
+    }
+
+    /// A push names a path and never a host, so the user's credential reaches only the endpoint
+    /// the host registered, over https.
+    func url(endpoint: String) -> URL? {
+        guard endpoint.hasPrefix("https://"), path.count <= 64,
+              path.unicodeScalars.allSatisfy({ Self.pathCharacters.contains($0) })
+        else { return nil }
+        let base = endpoint.hasSuffix("/") ? String(endpoint.dropLast()) : endpoint
+        return URL(string: base + "/" + path)
+    }
+}
+
+/// Performs a remote notification's action with the app possibly launched in the background for
+/// it, and calls `completion` once, when nothing more will run.
+protocol RemoteActionPerformer: AnyObject, Sendable {
+    func perform(_ request: RemoteActionRequest, completion: @escaping @Sendable () -> Void)
+}
+
+/// What survives the process between an action and the host's next start: the endpoint the host
+/// registered, and each action's outcome until `NotificationManager.drain_action_results()`.
+final class RemoteActionStore: @unchecked Sendable {
+
+    static let shared = RemoteActionStore()
+
+    static let sent = "sent"
+    static let refused = "refused"
+    static let failed = "failed"
+
+    private static let endpointKey = "godot_apple_plugins.remote_action_endpoint"
+    private static let resultsKey = "godot_apple_plugins.remote_action_results"
+    private static let maxLogged = 16
+
+    private let lock = NSLock()
+
+    var endpoint: String {
+        get { UserDefaults.standard.string(forKey: Self.endpointKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: Self.endpointKey) }
+    }
+
+    /// 401 is retryable because a token can expire between its read and the post, and 408 and
+    /// 429 ask for a retry outright; any other 4xx is an answer, and no status is a failure.
+    static func outcome(forStatus status: Int) -> String {
+        switch status {
+        case 200...299: return sent
+        case 401, 408, 429: return failed
+        case 400...499: return refused
+        default: return failed
+        }
+    }
+
+    func record(_ request: RemoteActionRequest, outcome: String, httpStatus: Int, uid: String) {
+        let posted: [String: Any] = [
+            "path": request.path,
+            "body": NotificationJSON.object(from: request.bodyJSON) ?? [:],
+        ]
+        let entry: [String: Any] = [
+            "action_id": request.actionId,
+            "request": posted,
+            "payload": request.payload,
+            "status": outcome,
+            "http_status": httpStatus,
+            "uid": uid,
+            "at_ms": Int64(Date().timeIntervalSince1970 * 1000),
+        ]
+        lock.lock()
+        defer { lock.unlock() }
+        let stored = UserDefaults.standard.string(forKey: Self.resultsKey) ?? "[]"
+        var log = NotificationJSON.array(from: stored) ?? []
+        log.append(entry)
+        if log.count > Self.maxLogged {
+            log.removeFirst(log.count - Self.maxLogged)
+        }
+        UserDefaults.standard.set(NotificationJSON.encode(log) ?? "[]", forKey: Self.resultsKey)
+    }
+
+    func drain() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        let stored = UserDefaults.standard.string(forKey: Self.resultsKey) ?? "[]"
+        UserDefaults.standard.removeObject(forKey: Self.resultsKey)
+        return stored
+    }
+}
+
+/// Holds a completion handler UIKit hands over without a sendability annotation, so it can be
+/// called once from the queue the work finishes on.
+final class RemoteActionCompletion: @unchecked Sendable {
+
+    private let lock = NSLock()
+    private var handler: (() -> Void)?
+
+    init(_ handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    func call() {
+        lock.lock()
+        let pending = handler
+        handler = nil
+        lock.unlock()
+        pending?()
+    }
+}
+
 /// The seam holding the notification centre and a messaging service apart: this half must keep
 /// working when push does not, so it learns nothing of the transport beyond the one key below.
 final class RemoteNotificationRelay: @unchecked Sendable {
@@ -242,9 +381,24 @@ final class RemoteNotificationRelay: @unchecked Sendable {
     private var buffered: [RemoteNotificationEvent] = []
     private var deviceToken: Data?
     private weak var sink: (any RemoteNotificationSink)?
+    private var performer: (any RemoteActionPerformer)?
 
     static func isRemote(_ userInfo: [AnyHashable: Any]) -> Bool {
         return userInfo[transportMessageIdKey] != nil
+    }
+
+    /// Installed at extension init, before the scene connects, because an action can launch the
+    /// app in the background with no script ever running.
+    func install(performer newPerformer: any RemoteActionPerformer) {
+        lock.lock()
+        performer = newPerformer
+        lock.unlock()
+    }
+
+    var actionPerformer: (any RemoteActionPerformer)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return performer
     }
 
     /// The token is a level and not an edge, so it is retained and replayed rather than consumed.
@@ -473,13 +627,27 @@ final class NotificationCenterService: NSObject, UNUserNotificationCenterDelegat
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
+        let identifier = response.actionIdentifier
+        let userInfo = response.notification.request.content.userInfo
+
+        // An action the sender attached a request to is performed here and opens nothing: the
+        // system keeps a background launch alive until the handler is called, so it is called
+        // only once the request has finished.
+        if identifier != UNNotificationDefaultActionIdentifier,
+           identifier != UNNotificationDismissActionIdentifier,
+           RemoteNotificationRelay.isRemote(userInfo),
+           let request = RemoteActionRequest.from(userInfo: userInfo, actionId: identifier),
+           let performer = RemoteNotificationRelay.shared.actionPerformer {
+            let completion = RemoteActionCompletion(completionHandler)
+            performer.perform(request) { completion.call() }
+            return
+        }
+
         defer { completionHandler() }
 
-        let identifier = response.actionIdentifier
         // A swipe-away is not an open, and routing it would foreground the app the user dismissed.
         guard identifier != UNNotificationDismissActionIdentifier else { return }
 
-        let userInfo = response.notification.request.content.userInfo
         // Routed to the relay instead: flat transport keys rather than the single `payload` this
         // file writes, and an open owing a cold-launch bit the local queue cannot hold.
         if RemoteNotificationRelay.isRemote(userInfo) {

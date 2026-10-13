@@ -317,6 +317,23 @@ class NotificationManager: RefCounted, @unchecked Sendable {
         NotificationEventQueue.shared.markReady()
     }
 
+    // MARK: - Remote actions
+
+    /// The https base every remote action's path is appended to, kept for a launch with no script
+    /// running. A push names a path and never a host, so a payload cannot send the user's
+    /// credential anywhere else; anything but https clears it.
+    @Callable
+    func set_action_endpoint(url: String) {
+        RemoteActionStore.shared.endpoint = url.hasPrefix("https://") ? url : ""
+    }
+
+    /// Each remote action performed since the last call, oldest first, as a JSON array of
+    /// `{"action_id", "request", "payload", "status", "http_status", "uid", "at_ms"}`; destructive.
+    @Callable
+    func drain_action_results() -> String {
+        return RemoteActionStore.shared.drain()
+    }
+
     // MARK: - Internals
 
 #if os(iOS)
@@ -347,9 +364,15 @@ class NotificationManager: RefCounted, @unchecked Sendable {
               let title = declared["title"] as? String
         else { return nil }
 
-        let options: UNNotificationActionOptions = declared["foreground"] as? Bool == true
-            ? [.foreground]
-            : []
+        var options: UNNotificationActionOptions = []
+        if declared["foreground"] as? Bool == true {
+            options.insert(.foreground)
+        }
+        // From the lock screen, an action performed without opening the app asks for the passcode
+        // first, so it is never performed by whoever holds the locked phone.
+        if declared["authentication_required"] as? Bool == true {
+            options.insert(.authenticationRequired)
+        }
         return UNNotificationAction(identifier: identifier, title: title, options: options)
     }
 
