@@ -22,14 +22,19 @@ final class FirebaseRemoteActionPerformer: RemoteActionPerformer, @unchecked Sen
                 FirebaseApp.configure()
             }
             let store = RemoteActionStore.shared
-            guard let user = Auth.auth().currentUser,
-                  let url = request.url(endpoint: store.endpoint)
-            else {
+            guard let user = Auth.auth().currentUser else {
                 store.record(request, outcome: RemoteActionStore.failed, httpStatus: 0, uid: "")
                 completion()
                 return
             }
+            // A failed outcome is retried by the host only under the uid it names, so every
+            // failure after this point carries the user's.
             let uid = user.uid
+            guard let url = request.url(endpoint: store.endpoint) else {
+                store.record(request, outcome: RemoteActionStore.failed, httpStatus: 0, uid: uid)
+                completion()
+                return
+            }
             user.getIDTokenForcingRefresh(false) { token, error in
                 guard let token, error == nil else {
                     store.record(request, outcome: RemoteActionStore.failed, httpStatus: 0, uid: uid)
