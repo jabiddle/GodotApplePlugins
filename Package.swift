@@ -21,7 +21,7 @@ let linkerSettings: [LinkerSetting] = [
 let package = Package(
     name: "GodotApplePlugins",
     platforms: [
-        .iOS(.v17),
+        .iOS(.v18),
         .macOS("14.0"),
     ],
     products: [

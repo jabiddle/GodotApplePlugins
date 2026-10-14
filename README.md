@@ -30,7 +30,7 @@ megs at the time of this writing).
 
 # Requirements
 
-iOS 17.0, MacOS Sonoma (14.0)
+iOS 18.0, MacOS Sonoma (14.0)
 
 # API Design
 
