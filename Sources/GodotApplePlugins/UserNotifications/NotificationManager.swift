@@ -329,6 +329,7 @@ class NotificationManager: RefCounted, @unchecked Sendable {
 
     /// Each remote action performed since the last call, oldest first, as a JSON array of
     /// `{"action_id", "request", "payload", "status", "http_status", "uid", "at_ms"}`; destructive.
+    /// One still in flight is in it as `failed`, and its outcome is then dropped.
     @Callable
     func drain_action_results() -> String {
         return RemoteActionStore.shared.drain()

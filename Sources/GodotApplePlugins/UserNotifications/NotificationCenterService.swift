@@ -312,28 +312,77 @@ final class RemoteActionStore: @unchecked Sendable {
         }
     }
 
-    func record(_ request: RemoteActionRequest, outcome: String, httpStatus: Int, uid: String) {
+    /// Names one logged entry, so its outcome replaces that entry and no other.
+    struct EntryKey: Sendable {
+        let actionId: String
+        let atMs: Int64
+        let uid: String
+
+        fileprivate func names(_ raw: Any) -> Bool {
+            guard let entry = raw as? [String: Any],
+                  let entryActionId = entry["action_id"] as? String,
+                  let entryAtMs = entry["at_ms"] as? NSNumber,
+                  let entryUid = entry["uid"] as? String
+            else { return false }
+            return entryActionId == actionId && entryAtMs.int64Value == atMs && entryUid == uid
+        }
+    }
+
+    /// Logs `request` as `failed` with no answer before it goes over the network, so a process
+    /// ended or suspended mid-request still leaves an entry the host sends again.
+    func recordPending(_ request: RemoteActionRequest, uid: String) -> EntryKey {
+        let key = EntryKey(
+            actionId: request.actionId,
+            atMs: Int64(Date().timeIntervalSince1970 * 1000),
+            uid: uid
+        )
         let posted: [String: Any] = [
             "path": request.path,
             "body": NotificationJSON.object(from: request.bodyJSON) ?? [:],
         ]
         let entry: [String: Any] = [
-            "action_id": request.actionId,
+            "action_id": key.actionId,
             "request": posted,
             "payload": request.payload,
-            "status": outcome,
-            "http_status": httpStatus,
-            "uid": uid,
-            "at_ms": Int64(Date().timeIntervalSince1970 * 1000),
+            "status": Self.failed,
+            "http_status": 0,
+            "uid": key.uid,
+            "at_ms": key.atMs,
         ]
         lock.lock()
         defer { lock.unlock() }
-        let stored = UserDefaults.standard.string(forKey: Self.resultsKey) ?? "[]"
-        var log = NotificationJSON.array(from: stored) ?? []
+        var log = storedLog()
         log.append(entry)
         if log.count > Self.maxLogged {
             log.removeFirst(log.count - Self.maxLogged)
         }
+        save(log)
+        return key
+    }
+
+    /// Replaces the entry `key` names with the outcome `httpStatus` gives; 0 is no answer. An
+    /// entry no longer there was drained while its request ran and the host has already taken it
+    /// as failed, so the outcome is dropped rather than read as a second tap.
+    func settle(_ key: EntryKey, httpStatus: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        var log = storedLog()
+        guard let index = log.lastIndex(where: { key.names($0) }),
+              var entry = log[index] as? [String: Any]
+        else { return }
+        entry["status"] = Self.outcome(forStatus: httpStatus)
+        entry["http_status"] = httpStatus
+        log[index] = entry
+        save(log)
+    }
+
+    /// Callers hold `lock`: every write is a read-modify-write of the whole log.
+    private func storedLog() -> [Any] {
+        let stored = UserDefaults.standard.string(forKey: Self.resultsKey) ?? "[]"
+        return NotificationJSON.array(from: stored) ?? []
+    }
+
+    private func save(_ log: [Any]) {
         UserDefaults.standard.set(NotificationJSON.encode(log) ?? "[]", forKey: Self.resultsKey)
     }
 

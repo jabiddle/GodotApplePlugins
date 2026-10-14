@@ -22,23 +22,21 @@ final class FirebaseRemoteActionPerformer: RemoteActionPerformer, @unchecked Sen
                 FirebaseApp.configure()
             }
             let store = RemoteActionStore.shared
-            guard let user = Auth.auth().currentUser else {
-                store.record(request, outcome: RemoteActionStore.failed, httpStatus: 0, uid: "")
+            let signedIn = Auth.auth().currentUser
+            // The host sends a failed tap again only under the uid its entry names, so the entry
+            // carries the user's from before the endpoint, the token or the post can fail.
+            let pending = store.recordPending(request, uid: signedIn?.uid ?? "")
+            let finish: @Sendable (Int) -> Void = { status in
+                store.settle(pending, httpStatus: status)
                 completion()
-                return
             }
-            // A failed outcome is retried by the host only under the uid it names, so every
-            // failure after this point carries the user's.
-            let uid = user.uid
-            guard let url = request.url(endpoint: store.endpoint) else {
-                store.record(request, outcome: RemoteActionStore.failed, httpStatus: 0, uid: uid)
-                completion()
+            guard let user = signedIn, let url = request.url(endpoint: store.endpoint) else {
+                finish(0)
                 return
             }
             user.getIDTokenForcingRefresh(false) { token, error in
                 guard let token, error == nil else {
-                    store.record(request, outcome: RemoteActionStore.failed, httpStatus: 0, uid: uid)
-                    completion()
+                    finish(0)
                     return
                 }
                 var post = URLRequest(url: url, timeoutInterval: FirebaseRemoteActionPerformer.requestTimeout)
@@ -47,14 +45,7 @@ final class FirebaseRemoteActionPerformer: RemoteActionPerformer, @unchecked Sen
                 post.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 post.httpBody = Data(request.bodyJSON.utf8)
                 URLSession.shared.dataTask(with: post) { _, response, _ in
-                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                    store.record(
-                        request,
-                        outcome: RemoteActionStore.outcome(forStatus: status),
-                        httpStatus: status,
-                        uid: uid
-                    )
-                    completion()
+                    finish((response as? HTTPURLResponse)?.statusCode ?? 0)
                 }.resume()
             }
         }
