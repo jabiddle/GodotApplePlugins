@@ -2,7 +2,8 @@ import XCTest
 @testable import ScreenTimeCore
 
 /// The windows that wake the enforcer: release windows from real ends, nothing starting at now,
-/// daily times paired two to a window, the roll past 32 times, and the boundary a callback stands for.
+/// running windows kept, daily times paired two to a window, the roll past 32 times, and the
+/// boundary a callback stands for.
 final class WakePlannerTests: XCTestCase {
     let now = at(2026, 10, 12, 10, 0)
 
@@ -35,23 +36,51 @@ final class WakePlannerTests: XCTestCase {
         XCTAssertEqual(release.endUnix - release.startUnix, WakePlanner.minimumWindowSeconds)
         let opening = windows.first { $0.kind == PlannedWindow.start }!
         XCTAssertEqual(opening.startUnix, start)
-        XCTAssertTrue(windows.allSatisfy { WakePlanner.registrable($0, now: now) })
+        XCTAssertTrue(windows.allSatisfy { WakePlanner.registrable($0, now: now, calendar: testCalendar) })
     }
 
     func test_no_window_starts_at_now() {
-        XCTAssertFalse(plan(["one": onceSpec(now - 600, now)]).contains { WakePlanner.registrable($0, now: now) },
+        XCTAssertFalse(plan(["one": onceSpec(now - 600, now)]).contains { WakePlanner.registrable($0, now: now, calendar: testCalendar) },
                        "a block ending now is lifted by the write itself, not by a window")
         let late = now + 57
-        XCTAssertFalse(plan(["one": onceSpec(now - 600, late + 2)], now: late).contains { WakePlanner.registrable($0, now: late) },
+        XCTAssertFalse(plan(["one": onceSpec(now - 600, late + 2)], now: late)
+                        .contains { WakePlanner.registrable($0, now: late, calendar: testCalendar) },
                        "a release window starting within the lead is not registered")
+    }
+
+    func test_a_daily_window_is_registrable_only_while_its_next_start_lies_beyond_the_lead() {
+        let window = PlannedWindow.daily(start: 11 * 60, end: 12 * 60)
+        func registrable(_ hour: Int, _ minute: Int, _ second: Int) -> Bool {
+            WakePlanner.registrable(window, now: at(2026, 10, 12, hour, minute, second), calendar: testCalendar)
+        }
+        XCTAssertTrue(registrable(10, 59, 54))
+        XCTAssertFalse(registrable(10, 59, 55), "five seconds ahead is within the lead")
+        XCTAssertFalse(registrable(11, 0, 0))
+        XCTAssertTrue(registrable(11, 0, 1), "its next start is tomorrow's")
     }
 
     func test_a_running_window_stays_wanted_until_its_end_so_its_end_still_wakes() {
         let end = now - 60
         let windows = plan(["one": onceSpec(now - 3600, end)])
         XCTAssertEqual(windows.map(\.kind), [PlannedWindow.release])
-        XCTAssertFalse(WakePlanner.registrable(windows[0], now: now))
+        XCTAssertFalse(WakePlanner.registrable(windows[0], now: now, calendar: testCalendar))
         XCTAssertTrue(plan(["one": onceSpec(now - 3600, end)], now: end + 900).isEmpty, "an ended window is no longer wanted")
+    }
+
+    func test_a_registered_window_holding_now_stays_wanted_though_its_slot_is_gone() {
+        let running = PlannedWindow.once(PlannedWindow.release, start: now - 60, end: now + 840)
+        XCTAssertEqual(WakePlanner.plan(slots: [:], now: now, calendar: testCalendar, registered: [running]), [running])
+        XCTAssertTrue(WakePlanner.plan(slots: [:], now: now + 840, calendar: testCalendar, registered: [running]).isEmpty)
+        let ahead = PlannedWindow.once(PlannedWindow.start, start: now + 60, end: now + 960)
+        XCTAssertTrue(WakePlanner.plan(slots: [:], now: now, calendar: testCalendar, registered: [ahead]).isEmpty,
+                      "a window not yet started is planned afresh")
+    }
+
+    func test_a_new_release_moves_off_a_running_windows_end() {
+        let running = PlannedWindow.once(PlannedWindow.start, start: now - 60, end: now + 840)
+        let windows = WakePlanner.plan(slots: ["one": SlotRecord(spec: onceSpec(now - 120, now + 840))], now: now,
+                                       calendar: testCalendar, registered: [running])
+        XCTAssertEqual(windows.first { $0.kind == PlannedWindow.release }?.startUnix, now + 900)
     }
 
     func test_a_short_blocks_windows_never_meet_at_one_instant() {
@@ -148,10 +177,36 @@ final class WakePlannerTests: XCTestCase {
         XCTAssertFalse(boundaries(plan(slots, now: until + 60)).contains(23 * 60 + 30))
     }
 
-    func test_a_once_window_landing_on_a_daily_wake_gives_way_to_it() {
+    func test_a_release_landing_on_a_daily_wake_moves_a_minute_later_rather_than_waiting_on_an_end() {
         let end = at(2026, 10, 12, 22, 0)
-        let slots = ["night": dailySpec([1], 22 * 60, 7 * 60), "once": onceSpec(now - 60, end)]
-        XCTAssertFalse(plan(slots).contains { !$0.repeats && $0.startUnix == end })
+        let night = ["night": dailySpec([1], 22 * 60, 7 * 60), "once": onceSpec(now - 60, end)]
+        let release = plan(night).first { $0.kind == PlannedWindow.release }
+        XCTAssertEqual(release?.startUnix, end + 60, "a minute late, never early, never dropped")
+        XCTAssertEqual(release.map { $0.endUnix - $0.startUnix }, WakePlanner.minimumWindowSeconds)
+
+        var crowded = night
+        crowded["late"] = dailySpec([1], 22 * 60 + 1, 23 * 60)
+        let windows = plan(crowded)
+        let moved = windows.first { $0.kind == PlannedWindow.release }!
+        XCTAssertEqual(moved.startUnix, end + 120, "past every daily wake")
+        let daily = Set(windows.filter(\.repeats).flatMap { [$0.startMinute, $0.endMinute] })
+        XCTAssertFalse(daily.contains(RestrictionTime.minuteOfDay(moved.startUnix, calendar: testCalendar)))
+        XCTAssertFalse(daily.contains(RestrictionTime.minuteOfDay(moved.endUnix, calendar: testCalendar)))
+    }
+
+    func test_a_running_roll_window_keeps_its_place_and_the_roll_does_not_move() {
+        var slots: [String: RestrictionSpec] = [:]
+        for index in 0..<12 {
+            slots["busy\(index)"] = dailySpec([1, 2, 3, 4, 5, 6, 7], index * 60, index * 60 + 30)
+        }
+        for index in 0..<6 {
+            slots["rare\(index)"] = dailySpec([2], 13 * 60 + index * 90, 13 * 60 + index * 90 + 45)
+        }
+        let rolled = plan(slots).filter { $0.kind == PlannedWindow.roll }.sorted { $0.startUnix < $1.startUnix }
+        let atItsStart = rolled[0].startUnix + 2
+        let again = WakePlanner.plan(slots: slots.mapValues { SlotRecord(spec: $0) }, now: atItsStart, calendar: testCalendar,
+                                     registered: rolled)
+        XCTAssertEqual(again.filter { $0.kind == PlannedWindow.roll }.sorted { $0.startUnix < $1.startUnix }, rolled)
     }
 
     func test_a_callback_stands_for_its_boundary_only_within_sixty_seconds() {

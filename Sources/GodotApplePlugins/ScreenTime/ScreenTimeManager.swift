@@ -23,7 +23,8 @@ class ScreenTimeManager: RefCounted, @unchecked Sendable {
     @Signal var events_available: SimpleSignal
 
     /// How long the system's list of monitored windows may take; past it a reconcile compares
-    /// against the store's own record alone, because the list has deadlocked.
+    /// against the store's own record alone, because the list has deadlocked. The reconcile holds
+    /// the store's lock meanwhile, so this stays under `RestrictionEnforcer.wakeLockSeconds`.
     private static let listTimeout: TimeInterval = 2.0
     /// The shield extensions' memory limit is unknown, and an image decodes to four bytes a pixel.
     private static let maxImageSide = 256
@@ -143,8 +144,8 @@ class ScreenTimeManager: RefCounted, @unchecked Sendable {
     // MARK: Selections
 
     /// The system's picker over the list held under `selection_id`, or an empty one. Resolves
-    /// `(ok, summary_json, code)`: `cancelled` when closed with nothing changed, `busy` while
-    /// another is up.
+    /// `(ok, summary_json, code)` once: `cancelled` when closed with nothing changed, `busy` while
+    /// another is up, `error: …` when it could not be shown.
     @Callable
     func present_selection_editor(selection_id: String, resolver: Callable) {
 #if os(iOS)
@@ -155,7 +156,7 @@ class ScreenTimeManager: RefCounted, @unchecked Sendable {
         let refusal: String
         if !enforcer.store.schemaMatches {
             refusal = RestrictionCode.schemaMismatch
-        } else if enforcer.status(apple: Self.appleStatus()) != AccessVerdict.approved {
+        } else if !enforcer.mayWrite(apple: Self.appleStatus()) {
             refusal = RestrictionCode.notAuthorized
         } else if selection_id.isEmpty {
             refusal = RestrictionCode.unknownSelection
@@ -170,20 +171,20 @@ class ScreenTimeManager: RefCounted, @unchecked Sendable {
         }
         presenting = true
         let initial = FamilyActivitySelection(tokens: enforcer.selection(selection_id) ?? ManagedRestrictionEnforcer.Selection())
-        let shown = MainActor.assumeIsolated {
-            SelectionSheet.present(initial: initial) { picked in
+        MainActor.assumeIsolated {
+            SelectionSheet.present(initial: initial) { answer in
                 self.presenting = false
-                guard let picked else {
+                switch answer {
+                case .cancelled:
                     _ = resolver.call(Variant(false), Variant(""), Variant(RestrictionCode.cancelled))
-                    return
+                case let .failed(reason):
+                    _ = resolver.call(Variant(false), Variant(""), Variant(RestrictionCode.platform(reason)))
+                case let .picked(picked):
+                    let code = enforcer.putSelection(picked.tokens, id: selection_id)
+                    _ = resolver.call(Variant(code.isEmpty), Variant(code.isEmpty ? enforcer.summary(selection_id) : ""),
+                                      Variant(code))
                 }
-                let code = enforcer.putSelection(picked.tokens, id: selection_id)
-                _ = resolver.call(Variant(code.isEmpty), Variant(code.isEmpty ? enforcer.summary(selection_id) : ""), Variant(code))
             }
-        }
-        if !shown {
-            presenting = false
-            _ = resolver.call(Variant(false), Variant(""), Variant(RestrictionCode.platform("no window to present the picker from")))
         }
 #else
         _ = resolver.call(Variant(false), Variant(""), Variant(RestrictionCode.unsupported))
@@ -464,13 +465,7 @@ class ScreenTimeManager: RefCounted, @unchecked Sendable {
     /// The system's list read off the main thread with a time limit, because it has deadlocked;
     /// nil when it did not answer in time.
     private static func listedWindows() -> [String: PlannedWindow]? {
-        let answer = ListedWindows()
-        let finished = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .userInitiated).async {
-            answer.set(DeviceActivityWindowBackend().listed())
-            finished.signal()
-        }
-        return finished.wait(timeout: .now() + listTimeout) == .success ? answer.value : nil
+        WindowListing.shared.list(timeout: listTimeout)
     }
 
     /// The image unchanged when it fits, else a thumbnail no larger than `maxSide` a side; empty
@@ -499,6 +494,47 @@ class ScreenTimeManager: RefCounted, @unchecked Sendable {
 }
 
 #if os(iOS)
+/// One listing of the system's windows at a time. A listing that hangs keeps its thread, so a
+/// listing asked for while one is still out answers nil at once rather than stranding another
+/// thread at every return to the front.
+private final class WindowListing: @unchecked Sendable {
+    static let shared = WindowListing()
+
+    private let lock = NSLock()
+    private var outstanding = false
+
+    /// Nil when the list did not answer within `timeout`, or an earlier listing has not answered yet.
+    func list(timeout: TimeInterval) -> [String: PlannedWindow]? {
+        guard claim() else {
+            return nil
+        }
+        let answer = ListedWindows()
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            answer.set(DeviceActivityWindowBackend().listed())
+            self.release()
+            finished.signal()
+        }
+        return finished.wait(timeout: .now() + timeout) == .success ? answer.value : nil
+    }
+
+    private func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if outstanding {
+            return false
+        }
+        outstanding = true
+        return true
+    }
+
+    private func release() {
+        lock.lock()
+        outstanding = false
+        lock.unlock()
+    }
+}
+
 private final class ListedWindows: @unchecked Sendable {
     private let lock = NSLock()
     private var stored: [String: PlannedWindow]?

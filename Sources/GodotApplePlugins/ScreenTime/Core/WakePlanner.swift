@@ -53,11 +53,22 @@ public enum WakePlanner {
 
     /// Every window wanted at `now`: a release window from each end of a `once` slot, a window from
     /// a `once` slot's start while it lies ahead, and daily wake windows for every `daily` time.
-    /// A window already running stays wanted until its end, so its end still wakes; only a window
-    /// not yet registered must start ahead of now (`registrable`).
-    public static func plan(slots: [String: SlotRecord], now: Int, calendar: Calendar) -> [PlannedWindow] {
-        let daily = dailyWindows(slots: slots, now: now, calendar: calendar)
+    /// A window already running stays wanted until its end, so its end still wakes: every window of
+    /// `registered` that does not repeat and holds `now` is wanted as registered, and a new window
+    /// meets neither of its bounds. Only a window not yet registered must start ahead of now
+    /// (`registrable`).
+    public static func plan(slots: [String: SlotRecord], now: Int, calendar: Calendar,
+                            registered: [PlannedWindow] = []) -> [PlannedWindow] {
+        let running = registered.filter { !$0.repeats && $0.startUnix <= now && now < $0.endUnix }
+        let runningEnds = Set(running.map(\.endUnix))
+        let daily = dailyWindows(slots: slots, now: now, calendar: calendar, running: running)
         let dailyTimes = Set(daily.wakes.flatMap { [$0.startMinute, $0.endMinute] })
+        // A daily wake or a running window's end already lands on the instant, and two windows
+        // meeting there misfire.
+        let landsOnAWake = { (unix: Int) -> Bool in
+            runningEnds.contains(unix)
+                || (unix % 60 == 0 && dailyTimes.contains(RestrictionTime.minuteOfDay(unix, calendar: calendar)))
+        }
         var once: [PlannedWindow] = []
         for slotId in slots.keys.sorted() {
             let spec = slots[slotId]!.spec
@@ -75,31 +86,51 @@ public enum WakePlanner {
             once.append(.once(PlannedWindow.start, start: opening, end: opening + minimumWindowSeconds))
         }
         once += daily.rolled
-        var starts = Set<Int>()
+        var starts = Set(running.map(\.startUnix))
         var kept: [PlannedWindow] = []
-        for window in once.sorted(by: { ($0.startUnix, $0.kind) < ($1.startUnix, $1.kind) }) where window.endUnix > now {
-            // A daily wake already lands on this instant, and two windows meeting there misfire.
-            let onDailyTime = window.startUnix % 60 == 0
-                && dailyTimes.contains(RestrictionTime.minuteOfDay(window.startUnix, calendar: calendar))
-            if onDailyTime || !starts.insert(window.startUnix).inserted {
+        for var window in once.sorted(by: { ($0.startUnix, $0.kind) < ($1.startUnix, $1.kind) }) where window.endUnix > now {
+            if window.kind == PlannedWindow.release {
+                // A lift waits on a start, which arrives, never on an end the system may not deliver:
+                // a minute late, never early.
+                while landsOnAWake(window.startUnix) {
+                    window.startUnix += 60
+                    window.endUnix += 60
+                }
+            }
+            if running.contains(where: { $0.sameInterval(window) }) {
+                continue
+            }
+            if window.kind != PlannedWindow.release && landsOnAWake(window.startUnix) {
+                continue
+            }
+            // Another window's start wakes here already.
+            if !starts.insert(window.startUnix).inserted {
                 continue
             }
             kept.append(window)
         }
         for index in kept.indices {
-            while starts.contains(kept[index].endUnix)
-                || (kept[index].endUnix % 60 == 0
-                    && dailyTimes.contains(RestrictionTime.minuteOfDay(kept[index].endUnix, calendar: calendar))) {
+            while starts.contains(kept[index].endUnix) || landsOnAWake(kept[index].endUnix) {
                 kept[index].endUnix += 60
             }
         }
-        return daily.wakes + kept
+        return daily.wakes + running + kept
     }
 
-    /// Whether a window not yet registered may be: one starting at or before now would fire its start
-    /// at once, which the system does not do reliably.
-    public static func registrable(_ window: PlannedWindow, now: Int) -> Bool {
-        window.repeats || window.startUnix > now + leadSeconds
+    /// Whether a window not yet registered may be: one whose start comes within the lead of now,
+    /// the next occurrence of a daily window's start included, would start as it is registered,
+    /// which the system does not do reliably.
+    public static func registrable(_ window: PlannedWindow, now: Int, calendar: Calendar) -> Bool {
+        guard window.repeats else {
+            return window.startUnix > now + leadSeconds
+        }
+        var next = RestrictionTime.instant(dayStart: RestrictionTime.dayStart(now, days: 0, calendar: calendar),
+                                           minute: window.startMinute, calendar: calendar)
+        if next < now {
+            next = RestrictionTime.instant(dayStart: RestrictionTime.dayStart(now, days: 1, calendar: calendar),
+                                           minute: window.startMinute, calendar: calendar)
+        }
+        return next > now + leadSeconds
     }
 
     /// The instant a callback evaluates at: the later of the clock and the boundary it stands for,
@@ -120,8 +151,9 @@ public enum WakePlanner {
     }
 
     /// The daily wake windows, and when there are more than 32 distinct times, the one-off windows
-    /// of the roll.
-    static func dailyWindows(slots: [String: SlotRecord], now: Int, calendar: Calendar)
+    /// of the roll. A running roll window keeps its place among the roll's four and the instant its
+    /// end wakes at, so the roll is not planned afresh at every one of its own starts.
+    static func dailyWindows(slots: [String: SlotRecord], now: Int, calendar: Calendar, running: [PlannedWindow] = [])
         -> (wakes: [PlannedWindow], rolled: [PlannedWindow]) {
         var weight: [Int: Int] = [:]
         var days: [Int: Set<Int>] = [:]
@@ -164,8 +196,10 @@ public enum WakePlanner {
             }
             upcoming.formUnion(instants[minute, default: []])
         }
-        let next = upcoming.filter { $0 > now + leadSeconds }.sorted().prefix(rollingWindows * 2)
-        return (pairDaily(kept), pairOnce(Array(next)))
+        let covered = Set(running.map(\.endUnix))
+        let room = max(0, rollingWindows - running.filter { $0.kind == PlannedWindow.roll }.count)
+        let next = upcoming.filter { $0 > now + leadSeconds && !covered.contains($0) }.sorted().prefix(room * 2)
+        return (pairDaily(kept), pairOnce(Array(next), limit: room))
     }
 
     /// Pairs each time with the one half the list later, the earlier of the two as the start when
@@ -196,10 +230,10 @@ public enum WakePlanner {
 
     /// One-off windows over the roll's upcoming instants: each takes the earliest instant left and,
     /// as its end, the first one 15 minutes after it, or a padded end when none is.
-    static func pairOnce(_ instants: [Int]) -> [PlannedWindow] {
+    static func pairOnce(_ instants: [Int], limit: Int = rollingWindows) -> [PlannedWindow] {
         var remaining = instants.sorted()
         var windows: [PlannedWindow] = []
-        while !remaining.isEmpty && windows.count < rollingWindows {
+        while !remaining.isEmpty && windows.count < limit {
             let start = remaining.removeFirst()
             if let index = remaining.firstIndex(where: { $0 >= start + minimumWindowSeconds && $0 - start <= 7 * RestrictionTime.secondsPerDay }) {
                 windows.append(.once(PlannedWindow.roll, start: start, end: remaining.remove(at: index)))

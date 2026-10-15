@@ -342,13 +342,31 @@ public final class RestrictionStore {
 
     // MARK: The lock
 
-    /// Serialises the app and its extensions over the store. Held only for a synchronous call: a
-    /// process the system suspends while it holds a lock in a shared container is killed for it.
+    /// Serialises the app and its extensions over the store, waiting for as long as another process
+    /// holds it: a body run unlocked loses another process's update. Every holder holds it for one
+    /// synchronous call, and a process the system suspends while it holds a lock in a shared
+    /// container is killed for it, which releases the lock.
     public func withLock<T>(_ body: () throws -> T) rethrows -> T {
-        processLock.lock()
+        // Never nil: without a deadline the lock is always taken.
+        try locked(until: nil, body)!
+    }
+
+    /// The same, giving up once `seconds` pass without the lock: nil then, and the body has not run.
+    public func withLock<T>(within seconds: TimeInterval, _ body: () throws -> T) rethrows -> T? {
+        try locked(until: Date().addingTimeInterval(seconds), body)
+    }
+
+    func locked<T>(until deadline: Date?, _ body: () throws -> T) rethrows -> T? {
+        if let deadline {
+            guard processLock.lock(before: deadline) else {
+                return nil
+            }
+        } else {
+            processLock.lock()
+        }
         defer { processLock.unlock() }
-        if lockDepth == 0 {
-            acquireFileLock()
+        if lockDepth == 0 && !acquireFileLock(until: deadline) {
+            return nil
         }
         lockDepth += 1
         defer {
@@ -360,21 +378,28 @@ public final class RestrictionStore {
         return try body()
     }
 
-    func acquireFileLock() {
+    /// Without Darwin there is one process, the tests', and the process lock serialises it.
+    func acquireFileLock(until deadline: Date?) -> Bool {
 #if canImport(Darwin)
-        let descriptor = open(directory.appendingPathComponent("lock").path, O_CREAT | O_RDWR, 0o644)
-        guard descriptor >= 0 else {
-            return
-        }
-        // Bounded: a store the lock keeps out for this long is better written unlocked than not at all.
-        for _ in 0..<200 {
-            if flock(descriptor, LOCK_EX | LOCK_NB) == 0 {
+        var descriptor: Int32 = -1
+        while true {
+            if descriptor < 0 {
+                descriptor = open(directory.appendingPathComponent("lock").path, O_CREAT | O_RDWR, 0o644)
+            }
+            if descriptor >= 0 && flock(descriptor, LOCK_EX | LOCK_NB) == 0 {
                 lockDescriptor = descriptor
-                return
+                return true
+            }
+            if let deadline, Date() >= deadline {
+                if descriptor >= 0 {
+                    close(descriptor)
+                }
+                return false
             }
             usleep(10_000)
         }
-        close(descriptor)
+#else
+        return true
 #endif
     }
 

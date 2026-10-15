@@ -173,8 +173,9 @@ public struct RestrictionSpec: Equatable, Sendable {
         return RestrictionBlock(mode: mode, selectionId: selectionId, exceptSelectionId: exceptId, blocksAllWeb: allWeb)
     }
 
+    /// Exactly one of `once` and `daily`; any other key is one a newer side added, and is ignored.
     private static func parseWindow(_ object: Any?) -> RestrictionWindow? {
-        guard let window = object as? [String: Any], window.count == 1 else {
+        guard let window = object as? [String: Any], (window["once"] == nil) != (window["daily"] == nil) else {
             return nil
         }
         if let once = window["once"] as? [String: Any] {

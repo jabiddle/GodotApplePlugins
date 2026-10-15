@@ -153,6 +153,14 @@ public struct ShieldContents<App: Hashable, Category: Hashable, Web: Hashable>: 
         apps.isEmpty && categories == .none && webDomains.isEmpty && !allWebDomains
     }
 
+    /// Whether these contents, read back after `written`, lack a field the write set. The system
+    /// answers a field it took none of with nil, as past a cap, while the other fields still read
+    /// back, so a store that is not empty can still have refused part of a write.
+    public func lacksAField(of written: Self) -> Bool {
+        (!written.apps.isEmpty && apps.isEmpty) || (written.categories != .none && categories == .none)
+            || (!written.webDomains.isEmpty && webDomains.isEmpty) || (written.allWebDomains && !allWebDomains)
+    }
+
     /// A shield on everything a store can shield, for the block-then-unblock of a rebuild.
     public static var everything: Self {
         Self(categories: .all(except: []), allWebDomains: true)
@@ -346,7 +354,7 @@ public struct ShieldPlanner<App: Hashable, Category: Hashable, Web: Hashable> {
 /// The words of one block screen, and the block a button on it names.
 public struct ComposedShield: Equatable, Sendable {
     public var appearanceId: String
-    /// Empty for the fallback screen, which matched no block.
+    /// Empty only for the fallback screen over an app no block covers.
     public var slotId: String
     public var title: String
     public var subtitle: String
@@ -355,23 +363,29 @@ public struct ComposedShield: Equatable, Sendable {
 /// Composes the block screen over one app from the appearances the host wrote. One covering block
 /// shows its own words; two or more show the joined title, their names in ascending `name_order`,
 /// and the joined line with the `until` of the block that holds longest. The host writes every
-/// word; this only joins them.
+/// word; this only joins them. A covering block whose appearance was never written is named only
+/// when no covering block has one: its screen shows the fallback words, and a button on it still
+/// routes to that block.
 public enum ShieldWords {
     public static func compose(slots: [String: SlotRecord], appearances: [String: [String: Any]], at unix: Int,
                                calendar: Calendar, covers: (RestrictionBlock) -> Bool) -> ComposedShield? {
+        var unnamed: [String] = []
         var covering: [(slotId: String, appearanceId: String, appearance: [String: Any], order: Int, ends: Int)] = []
         for slotId in slots.keys.sorted() {
             let record = slots[slotId]!
-            guard let appearance = appearances[record.spec.appearanceId],
-                  RestrictionEvaluator.dueBlocks(slotId: slotId, record: record, at: unix, calendar: calendar)
-                    .contains(where: { covers($0.block) }) else {
+            guard RestrictionEvaluator.dueBlocks(slotId: slotId, record: record, at: unix, calendar: calendar)
+                .contains(where: { covers($0.block) }) else {
+                continue
+            }
+            guard let appearance = appearances[record.spec.appearanceId] else {
+                unnamed.append(slotId)
                 continue
             }
             covering.append((slotId, record.spec.appearanceId, appearance, WireJSON.whole(appearance["name_order"]) ?? 0,
                              RestrictionEvaluator.holdsUntil(record, at: unix, calendar: calendar)))
         }
         guard !covering.isEmpty else {
-            return fallback(appearances)
+            return fallback(appearances, slotId: unnamed.first ?? "")
         }
         covering.sort { $0.order == $1.order ? $0.slotId < $1.slotId : $0.order < $1.order }
         let first = covering[0]
@@ -393,11 +407,11 @@ public enum ShieldWords {
     }
 
     /// The screen for an app a shield covers but no block's list matches, as after a system update
-    /// changes the app's token.
-    public static func fallback(_ appearances: [String: [String: Any]]) -> ComposedShield? {
+    /// changes the app's token, with `slotId` empty; or for a block with no appearance, naming it.
+    public static func fallback(_ appearances: [String: [String: Any]], slotId: String = "") -> ComposedShield? {
         for id in appearances.keys.sorted() where WireJSON.flag(appearances[id]?["fallback"]) == true {
             let appearance = appearances[id]!
-            return ComposedShield(appearanceId: id, slotId: "", title: text(appearance["title"]),
+            return ComposedShield(appearanceId: id, slotId: slotId, title: text(appearance["title"]),
                                   subtitle: text(appearance["subtitle"]))
         }
         return nil

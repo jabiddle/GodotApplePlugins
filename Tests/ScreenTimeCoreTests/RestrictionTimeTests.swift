@@ -87,6 +87,14 @@ final class RestrictionTimeTests: XCTestCase {
         XCTAssertNil(RestrictionSpec.parse(backwards))
     }
 
+    func test_a_window_key_an_older_side_does_not_know_is_ignored() {
+        var spec = onceSpec(100, 1000).jsonObject
+        spec["window"] = ["once": ["start_unix": 100, "end_unix": 1000], "zone": "added later"]
+        XCTAssertEqual(RestrictionSpec.parse(spec)?.window, .once(startUnix: 100, endUnix: 1000))
+        spec["window"] = ["zone": "added later"]
+        XCTAssertNil(RestrictionSpec.parse(spec), "a window still needs one of its two shapes")
+    }
+
     func test_a_spec_reads_back_with_whole_numbers_and_empty_ids() {
         let parsed = RestrictionSpec.parse(WireJSON.object(
             #"{"mode":"block_all","window":{"once":{"start_unix":10.0,"end_unix":20}},"generation":3.0,"exempt":["call"]}"#))

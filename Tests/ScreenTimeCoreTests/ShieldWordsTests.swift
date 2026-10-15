@@ -2,7 +2,8 @@ import XCTest
 @testable import ScreenTimeCore
 
 /// One block screen from the host's appearances: a block's own words, two blocks joined by their
-/// order with the later end, and the fallback screen for an app no block matches.
+/// order with the later end, and the fallback screen for an app no block matches or a block with
+/// no appearance.
 final class ShieldWordsTests: XCTestCase {
     let now = at(2026, 10, 12, 22, 30)
 
@@ -35,14 +36,29 @@ final class ShieldWordsTests: XCTestCase {
     }
 
     func test_three_blocks_join_with_the_separator_and_the_last_separator() {
-        let slots = ["a": onceSpec(now - 60, now + 600, appearance: "a"), "b": onceSpec(now - 60, now + 900, appearance: "b"),
+        let slots = ["a": onceSpec(now - 60, now + 900, appearance: "a"), "b": onceSpec(now - 60, now + 600, appearance: "b"),
                      "c": onceSpec(now - 60, now + 300, appearance: "c")]
         let appearances = ["a": appearance("A", order: 2, until: "a"), "b": appearance("B", order: 0, until: "b"),
                            "c": appearance("C", order: 1, until: "c")]
         let shield = compose(slots, appearances)
         XCTAssertEqual(shield?.title, "Held by B, C and A")
-        XCTAssertEqual(shield?.subtitle, "Held until b.")
+        XCTAssertEqual(shield?.subtitle, "Held until a.", "the latest end, which is not the first-named block's")
         XCTAssertEqual(shield?.slotId, "b")
+    }
+
+    func test_a_covering_block_without_an_appearance_shows_the_fallback_words_and_names_its_slot() {
+        let slots = ["z": onceSpec(now - 60, now + 600, appearance: "missing"), "y": onceSpec(now - 60, now + 600, appearance: "gone")]
+        let shield = compose(slots, ["first": appearance("First", order: 0, until: "soon", fallback: true)])
+        XCTAssertEqual(shield, ComposedShield(appearanceId: "first", slotId: "y", title: "Only First", subtitle: "Until soon"),
+                       "the lowest of the covering slots, so the button still routes to a block")
+    }
+
+    func test_a_covering_block_with_an_appearance_is_named_before_one_without() {
+        let slots = ["a": onceSpec(now - 60, now + 600, appearance: "night"), "b": onceSpec(now - 60, now + 600, appearance: "missing")]
+        let appearances = ["first": appearance("First", order: 0, until: "soon", fallback: true),
+                           "night": appearance("Night", order: 1, until: "07:00")]
+        XCTAssertEqual(compose(slots, appearances),
+                       ComposedShield(appearanceId: "night", slotId: "a", title: "Only Night", subtitle: "Until 07:00"))
     }
 
     func test_an_app_no_block_matches_gets_the_fallback_screen_naming_no_slot() {

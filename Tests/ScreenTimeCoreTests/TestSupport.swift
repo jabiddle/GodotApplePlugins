@@ -51,8 +51,16 @@ final class MemoryValues: SharedValues {
     }
 }
 
+/// One field of a store's shield.
+enum ShieldField {
+    case apps
+    case categories
+    case webDomains
+    case allWebDomains
+}
+
 /// Named stores in memory. A store in `refusing` takes a write and reads back empty, as the system
-/// does past its cap.
+/// does past its cap; a field in `refusingFields` reads back nil while the store's others hold.
 final class FakeShields: ShieldBackend {
     typealias App = String
     typealias Category = String
@@ -61,6 +69,7 @@ final class FakeShields: ShieldBackend {
     var stores: [String: Contents] = [:]
     var writes: [(name: String, contents: Contents)] = []
     var refusing: Set<String> = []
+    var refusingFields: [String: Set<ShieldField>] = [:]
     var marker = false
     var renewal: ((Selection) -> TokenRenewal<String, String, String>)?
 
@@ -70,7 +79,20 @@ final class FakeShields: ShieldBackend {
 
     func write(store name: String, contents: Contents) {
         writes.append((name, contents))
-        stores[name] = refusing.contains(name) ? nil : (contents.isEmpty ? nil : contents)
+        var taken = contents
+        for field in refusingFields[name] ?? [] {
+            switch field {
+            case .apps:
+                taken.apps = []
+            case .categories:
+                taken.categories = .none
+            case .webDomains:
+                taken.webDomains = []
+            case .allWebDomains:
+                taken.allWebDomains = false
+            }
+        }
+        stores[name] = refusing.contains(name) || taken.isEmpty ? nil : taken
     }
 
     func markerHolds() -> Bool {
@@ -119,7 +141,8 @@ final class FakeWindows: WindowBackend {
     }
 }
 
-final class Harness {
+/// Unchecked: a test hands it to a second thread only to hold the store's lock there.
+final class Harness: @unchecked Sendable {
     let shields = FakeShields()
     let windows = FakeWindows()
     let store: RestrictionStore

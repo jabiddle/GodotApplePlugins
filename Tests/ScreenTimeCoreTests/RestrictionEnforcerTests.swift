@@ -111,6 +111,66 @@ final class RestrictionEnforcerTests: XCTestCase {
         XCTAssertEqual(answer["lifted"] as? Int, 1)
     }
 
+    func test_a_block_set_between_the_prompts_approval_and_the_platforms_publishing_it_holds() {
+        let h = harness()
+        let spec = specJSON(onceSpec(now - 60, now + 3600))
+        XCTAssertEqual(h.enforcer.setRestriction(slotId: "a", json: spec, apple: .notDetermined), "",
+                       "the approval is recorded and the marker holds, as reconcile reads access")
+        XCTAssertNotNil(h.shields.stores[ShieldStoreName.all])
+        XCTAssertEqual(h.enforcer.setRestriction(slotId: "b", json: spec, apple: .denied), "not_authorized")
+        h.shields.marker = false
+        XCTAssertEqual(h.enforcer.setRestriction(slotId: "b", json: spec, apple: .notDetermined), "not_authorized",
+                       "a recorded approval without the marker is a revocation")
+        let fresh = harness(approved: false)
+        XCTAssertEqual(fresh.enforcer.setRestriction(slotId: "a", json: spec, apple: .notDetermined), "not_authorized")
+    }
+
+    func test_a_field_read_back_nil_is_reported_refused_though_the_store_holds_the_others() {
+        let h = harness()
+        h.put("l", apps: ["x"], categories: ["c"])
+        h.shields.refusingFields["list1"] = [.apps]
+        XCTAssertEqual(h.set("a", onceSpec(now - 60, now + 3600, mode: .blockSelection, list: "l")), "")
+        XCTAssertNotNil(h.shields.stores["list1"], "the categories still read back")
+        XCTAssertEqual(h.slot("a")["active"] as? Bool, false)
+        XCTAssertEqual(kinds(h.drain()), ["restriction_degraded:refused@a"])
+        h.enforcer.wake()
+        XCTAssertTrue(h.drain().isEmpty)
+    }
+
+    func test_a_query_that_succeeds_answers_an_empty_error() {
+        let h = harness()
+        h.put("a", apps: ["x"])
+        XCTAssertEqual(WireJSON.object(h.enforcer.summary("a"))?["error"] as? String, "")
+        XCTAssertEqual(WireJSON.object(h.enforcer.diffSelections(base: "a", other: "a"))?["error"] as? String, "")
+        XCTAssertEqual(h.restrictions()["error"] as? String, "")
+    }
+
+    func test_a_wake_that_cannot_take_the_lock_skips_rather_than_running_unlocked() {
+        let h = harness()
+        _ = h.set("a", onceSpec(now + 1800, now + 3600))
+        let opening = h.store.windows().first { $0.value.kind == PlannedWindow.start }!.key
+        h.now = now + 1801
+        let holding = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let released = DispatchSemaphore(value: 0)
+        Thread {
+            h.store.withLock {
+                holding.signal()
+                release.wait()
+            }
+            released.signal()
+        }.start()
+        holding.wait()
+        h.enforcer.wakeLockSeconds = 0.1
+        let writes = h.shields.writes.count
+        h.enforcer.handleCallback(windowName: opening, isEnd: false)
+        XCTAssertEqual(h.shields.writes.count, writes)
+        release.signal()
+        released.wait()
+        h.enforcer.handleCallback(windowName: opening, isEnd: false)
+        XCTAssertNotNil(h.shields.stores[ShieldStoreName.all], "the next wake catches up")
+    }
+
     func test_a_store_that_reads_back_empty_is_reported_refused_once_and_the_save_still_succeeds() {
         let h = harness()
         h.shields.refusing = [ShieldStoreName.all]
@@ -190,12 +250,77 @@ final class RestrictionEnforcerTests: XCTestCase {
     func test_a_callback_of_a_replaced_generation_does_nothing() {
         let h = harness()
         _ = h.set("a", onceSpec(now - 60, now + 3600))
+        let replaced = h.store.windows().first { $0.value.kind == PlannedWindow.release }!.key
+        _ = h.set("a", onceSpec(now - 60, now + 5400, generation: 2))
+        XCTAssertNil(h.store.windows()[replaced], "the later end replaced the window")
         _ = h.drain()
         h.shields.stores = [:]
         let writes = h.shields.writes.count
-        h.enforcer.handleCallback(windowName: "release.0", isEnd: true)
-        XCTAssertEqual(h.shields.writes.count, writes)
+        h.now = now + 3600
+        h.enforcer.handleCallback(windowName: replaced, isEnd: false)
+        XCTAssertEqual(h.shields.writes.count, writes, "a callback that ran would write the block again")
         XCTAssertTrue(h.drain().isEmpty)
+    }
+
+    func test_a_window_is_never_stopped_inside_its_own_callback_and_a_later_wake_stops_it_once_ended() {
+        let h = harness()
+        _ = h.set("a", onceSpec(now - 60, now + 600))
+        let release = h.store.windows().first { $0.value.kind == PlannedWindow.release }!
+        var stoppedInside: [String] = []
+        h.windows.onStop = { stoppedInside += $0 }
+        h.now = release.value.startUnix + 1
+        h.enforcer.handleCallback(windowName: release.key, isEnd: false)
+        h.now = release.value.endUnix + 1
+        h.enforcer.handleCallback(windowName: release.key, isEnd: true)
+        XCTAssertTrue(stoppedInside.isEmpty)
+        XCTAssertNotNil(h.store.windows()[release.key], "an ended window stays recorded for a later wake to stop")
+        h.windows.onStop = nil
+        _ = h.enforcer.reconcile(listed: h.windows.running)
+        XCTAssertNil(h.windows.running[release.key])
+        XCTAssertNil(h.store.windows()[release.key])
+    }
+
+    func test_a_roll_window_starting_keeps_itself_and_every_other_roll_window_registered() {
+        let h = Harness(now: at(2026, 10, 12, 10, 10))
+        h.approve()
+        for index in 0..<12 {
+            _ = h.set("busy\(index)", dailySpec([1, 2, 3, 4, 5, 6, 7], index * 60, index * 60 + 30))
+        }
+        for index in 0..<6 {
+            _ = h.set("rare\(index)", dailySpec([2], 13 * 60 + index * 90, 13 * 60 + index * 90 + 45))
+        }
+        let before = h.store.windows()
+        let first = before.filter { $0.value.kind == PlannedWindow.roll }.min { $0.value.startUnix < $1.value.startUnix }!
+        XCTAssertEqual(before.values.filter { $0.kind == PlannedWindow.roll }.count, 4)
+        let log = h.windows.log.count
+        h.now = first.value.startUnix + 2
+        h.enforcer.handleCallback(windowName: first.key, isEnd: false)
+        XCTAssertEqual(h.store.windows(), before)
+        XCTAssertEqual(Array(h.windows.log[log...]), [], "nothing stopped, nothing started again")
+    }
+
+    func test_a_daily_window_starting_within_the_lead_is_registered_by_a_later_wake() {
+        let h = harness()
+        h.now = at(2026, 10, 12, 10, 59, 57)
+        XCTAssertEqual(h.set("d", dailySpec([1], 11 * 60, 12 * 60)), "")
+        XCTAssertTrue(h.windows.running.isEmpty, "a window would start three seconds after it is registered")
+        h.now = at(2026, 10, 12, 11, 0, 30)
+        _ = h.enforcer.reconcile(listed: h.windows.running)
+        XCTAssertEqual(h.windows.running.values.map(\.startMinute), [11 * 60])
+        XCTAssertNotNil(h.shields.stores[ShieldStoreName.all])
+    }
+
+    func test_an_end_callback_within_sixty_seconds_of_its_boundary_evaluates_there_and_one_further_off_at_the_clock() {
+        for (early, lifts) in [(60, true), (61, false)] {
+            let h = harness()
+            _ = h.set("d", dailySpec([1], 9 * 60, 11 * 60))
+            XCTAssertNotNil(h.shields.stores[ShieldStoreName.all])
+            let wake = h.store.windows().first { $0.value.repeats }!
+            XCTAssertEqual(wake.value.endMinute, 11 * 60)
+            h.now = at(2026, 10, 12, 11, 0) - early
+            h.enforcer.handleCallback(windowName: wake.key, isEnd: true)
+            XCTAssertEqual(h.shields.stores[ShieldStoreName.all] == nil, lifts, "\(early) seconds before its end")
+        }
     }
 
     func test_the_new_generation_is_written_before_a_window_is_stopped() {

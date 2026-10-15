@@ -83,6 +83,10 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
     public var calendar: Calendar
     /// The platform's per-app cap in every class.
     public var cap = 50
+    /// How long a wake waits for another process's hold before it skips, leaving the next wake or
+    /// the app's reconcile to catch up. Longer than the app's longest hold, a reconcile that lists
+    /// the system's windows, so a wake skips only behind a hold that is stuck.
+    public var wakeLockSeconds: TimeInterval = 5
     let clock: () -> Int
 
     /// The calendar follows the device's time zone: a `daily` window is a local time.
@@ -119,6 +123,14 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
         store.withLock {
             AccessVerdict.status(apple: apple, recorded: store.approvalRecorded, markerHolds: markerChecked(now: clock()))
         }
+    }
+
+    /// Whether a write may go ahead: refused only while the verdict is denied or never asked. An
+    /// approval recorded here with the marker holding is access, as reconcile reads it, though the
+    /// platform has yet to publish approved: just after the prompt, a block set then must hold.
+    public func mayWrite(apple: AppleAuthorization) -> Bool {
+        let verdict = status(apple: apple)
+        return verdict == AccessVerdict.approved || verdict.isEmpty
     }
 
     /// Records this device's approval and writes the marker, after the platform's prompt approved.
@@ -164,7 +176,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
                 return WireJSON.text(["error": RestrictionCode.unknownSelection])
             }
             return WireJSON.text(["app_count": held.apps.count, "category_count": held.categories.count,
-                                  "web_count": held.web.count, "expired": held.expired])
+                                  "web_count": held.web.count, "expired": held.expired, "error": ""])
         }
     }
 
@@ -226,7 +238,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
                 return WireJSON.text(["error": RestrictionCode.unknownSelection])
             }
             return WireJSON.text(["added": compared.counts(beyond: baseline).jsonObject,
-                                  "removed": baseline.counts(beyond: compared).jsonObject])
+                                  "removed": baseline.counts(beyond: compared).jsonObject, "error": ""])
         }
     }
 
@@ -258,7 +270,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
                     return RestrictionCode.selectionTooLarge
                 }
             }
-            guard status(apple: apple) == AccessVerdict.approved else {
+            guard mayWrite(apple: apple) else {
                 return RestrictionCode.notAuthorized
             }
             var slots = store.slots()
@@ -352,13 +364,16 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
                                  "suspended_until": record.suspendedUntil,
                                  "padded": RestrictionEvaluator.isPadded(record.spec, minimumSeconds: WakePlanner.minimumWindowSeconds)]
             }
-            return WireJSON.text(["slots": slots, "windows_in_use": store.windows().count, "generation": store.generation])
+            return WireJSON.text(["slots": slots, "windows_in_use": store.windows().count, "generation": store.generation,
+                                  "error": ""])
         }
     }
 
     /// Compares what should hold now with what the stores and windows read back, and writes only
-    /// the difference. `listed` is the system's own list of windows, read by the app alone.
-    public func reconcile(listed: [String: PlannedWindow]?) -> String {
+    /// the difference. `listed` is the system's own list of windows, read by the app alone, and
+    /// read under the lock: a list read before it is stale against a wake that registered or
+    /// stopped a window meanwhile, and the difference would stop that wake's new window.
+    public func reconcile(listed: @autoclosure () -> [String: PlannedWindow]?) -> String {
         store.withLock {
             guard store.schemaMatches else {
                 return Tally(errors: [RestrictionCode.schemaMismatch]).answer(expired: [])
@@ -370,7 +385,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
             }
             var tally = Tally()
             apply(at: now, now: now, tally: &tally)
-            commitWindows(windowChange(slots: store.slots(), now: now, listed: listed), tally: &tally)
+            commitWindows(windowChange(slots: store.slots(), now: now, listed: listed()), tally: &tally)
             return tally.answer(expired: expiredSelectionIds())
         }
     }
@@ -453,9 +468,11 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
 
     /// A window callback. One naming a window of a replaced generation does nothing; any other
     /// evaluates at the boundary it stands for, within the tolerance, and registers the roll's
-    /// next windows from the store's record.
+    /// next windows from the store's record. It never stops its own window, since what a stop does
+    /// inside that window's callback is unmeasured: a window no longer wanted, as at its end, stays
+    /// recorded for the next wake or reconcile to stop.
     public func handleCallback(windowName: String, isEnd: Bool) {
-        store.withLock {
+        _ = store.withLock(within: wakeLockSeconds) {
             guard store.schemaMatches, let window = store.windows()[windowName] else {
                 return
             }
@@ -466,13 +483,13 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
             var tally = Tally()
             apply(at: WakePlanner.evaluationInstant(window: window, isEnd: isEnd, now: now, calendar: calendar), now: now,
                   tally: &tally)
-            commitWindows(windowChange(slots: store.slots(), now: now, listed: nil), tally: &tally)
+            commitWindows(windowChange(slots: store.slots(), now: now, listed: nil, sparing: windowName), tally: &tally)
         }
     }
 
-    /// A wake at the clock, as a tap on a block screen or a clock change gives.
+    /// A wake at the clock, as a tap on a block screen gives.
     public func wake() {
-        store.withLock {
+        _ = store.withLock(within: wakeLockSeconds) {
             guard store.schemaMatches else {
                 return
             }
@@ -486,8 +503,9 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
         }
     }
 
-    /// After a clock or time-zone change: every window that does not repeat was registered as the
-    /// local time of an instant, so it is registered again from the instant under a new name.
+    /// After a clock or time-zone change: every window that does not repeat and has not started was
+    /// registered as the local time of an instant, so it is registered again from the instant under a
+    /// new name.
     public func reregisterWindows() {
         store.withLock {
             guard store.schemaMatches else {
@@ -538,8 +556,8 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
     }
 
     /// A button pressed on a block screen, dated, naming the block the screen named; `""` for the
-    /// fallback screen. The newest that opens the app is the note the host reads as it comes to
-    /// the front.
+    /// screen over an app no block covers. The newest that opens the app is the note the host reads
+    /// as it comes to the front.
     public func recordShieldButton(slotId: String, button: String) {
         store.withLock {
             guard store.schemaMatches else {
@@ -633,7 +651,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
             let after = shields.read(store: name)
             readBack[name] = after
             written.insert(name)
-            if after.isEmpty {
+            if after.lacksAField(of: wanted) {
                 refused.insert(name)
             }
         }
@@ -699,14 +717,16 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
 
     /// The windows to keep, start and stop. A recorded window the system no longer lists, or lists
     /// resolving to other dates as after a time-zone change, is registered again under a new name; a
-    /// listed window the store never recorded is stopped.
+    /// listed window the store never recorded is stopped. `sparing` names a window kept whatever
+    /// the plan says.
     func windowChange(slots: [String: SlotRecord], now: Int, listed: [String: PlannedWindow]?,
-                      renewingOnce: Bool = false) -> WindowChange {
+                      renewingOnce: Bool = false, sparing: String? = nil) -> WindowChange {
         let recorded = store.windows()
         var current = recorded
         var stops: [String] = []
         if renewingOnce {
-            for (name, window) in recorded where !window.repeats {
+            // A running window could only start again at once, so it keeps its registration.
+            for (name, window) in recorded where !window.repeats && !(window.startUnix <= now && now < window.endUnix) {
                 current.removeValue(forKey: name)
                 stops.append(name)
             }
@@ -722,12 +742,15 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
         }
         var kept: [String: PlannedWindow] = [:]
         var starts: [PlannedWindow] = []
-        for window in WakePlanner.plan(slots: slots, now: now, calendar: calendar) {
+        for window in WakePlanner.plan(slots: slots, now: now, calendar: calendar, registered: Array(current.values)) {
             if let name = current.keys.sorted().first(where: { current[$0]!.sameInterval(window) }) {
                 kept[name] = current.removeValue(forKey: name)
-            } else if WakePlanner.registrable(window, now: now) {
+            } else if WakePlanner.registrable(window, now: now, calendar: calendar) {
                 starts.append(window)
             }
+        }
+        if let sparing, let window = current.removeValue(forKey: sparing) {
+            kept[sparing] = window
         }
         return WindowChange(kept: kept, starts: starts, stops: stops + current.keys.sorted())
     }
