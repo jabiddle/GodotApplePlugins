@@ -51,14 +51,26 @@ let package = Package(
                 .product(name: "FirebaseAnalytics", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseCrashlytics", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseStorage", package: "firebase-ios-sdk"),
-                .product(name: "FirebaseMessaging", package: "firebase-ios-sdk")
+                .product(name: "FirebaseMessaging", package: "firebase-ios-sdk"),
+                "ScreenTimeCore"
             ],
             exclude: [
                 "GameCenter/GameCenterGuide.md",
-                "GameCenter/Entitlements.md"
+                "GameCenter/Entitlements.md",
+                "ScreenTime/Core"
             ],
             swiftSettings: swiftSettings,
             linkerSettings: linkerSettings
+        ),
+        // Foundation and the Screen Time frameworks only: app extensions compile these same files,
+        // and the activity monitor runs in 6 MB.
+        .target(
+            name: "ScreenTimeCore",
+            path: "Sources/GodotApplePlugins/ScreenTime/Core"
+        ),
+        .testTarget(
+            name: "ScreenTimeCoreTests",
+            dependencies: ["ScreenTimeCore"]
         ),
     ]
 )

@@ -82,6 +82,7 @@ import SwiftGodotRuntime
         LiveActivityManager.self,
         DeepLinkManager.self,
         NotificationManager.self,
+        ScreenTimeManager.self,
     ],
     enums: [
         AVAudioSession.CategoryOptions.self,

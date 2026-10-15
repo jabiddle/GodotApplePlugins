@@ -25,13 +25,6 @@ protocol NotificationEventSink: AnyObject, Sendable {
     func deliverPushToken(_ token: String)
 }
 
-/// The keys a scheduled request carries in `userInfo` and the delegate reads back out.
-enum NotificationUserInfoKey {
-    static let payload = "payload"
-    static let presentInForeground = "present_in_foreground"
-    static let sound = "sound"
-}
-
 /// A lock-guarded slot, so a value can be filled in by a completion handler and read back by the
 /// caller waiting on it. Swift 6 refuses a plain captured `var` in a concurrently-executing closure.
 final class NotificationBox<Value>: @unchecked Sendable {
