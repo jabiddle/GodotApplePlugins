@@ -156,7 +156,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
             }
             store.appendEvents(events)
             store.lossReported = true
-            store.setHeld([:])
+            store.setHeld([:], at: now)
         }
         return false
     }
@@ -546,21 +546,24 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
         }
     }
 
-    /// The block screen over what `covers` matches now, from the host's appearances: nil only while
-    /// no appearance is written at all.
+    /// The block screen over what `covers` matches, from the host's appearances and the slots the
+    /// stores held at the last write: nil when no block covers it and no appearance is the fallback,
+    /// or while the store is at another version or cannot be parsed, when a button records nothing.
     public func composeShield(covers: (RestrictionBlock) -> Bool) -> ComposedShield? {
         store.withLock {
             guard store.schemaMatches else {
                 return nil
             }
             return ShieldWords.compose(slots: store.slots(), appearances: store.appearances(), at: clock(), calendar: calendar,
+                                       held: Set(store.held().keys), heldAt: store.heldAt,
+                                       unreadable: { $0.mode == .blockSelection && self.selection($0.selectionId) == nil },
                                        covers: covers)
         }
     }
 
-    /// A button pressed on a block screen, dated, naming the block the screen named; `""` for the
-    /// screen over an app no block covers. The newest that opens the app is the note the host reads
-    /// as it comes to the front.
+    /// A button pressed on a block screen, dated, naming the block the screen named; `""` only when
+    /// no block covers what was tapped (screen-time proposal §4.2). The newest that opens the app is
+    /// the note the host reads as it comes to the front.
     public func recordShieldButton(slotId: String, button: String) {
         store.withLock {
             guard store.schemaMatches else {
@@ -701,7 +704,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
                                            atUnix: now, reason: degraded[slotId]!))
         }
         store.setDegraded(degraded)
-        store.setHeld(heldAfter)
+        store.setHeld(heldAfter, at: evaluation)
         store.appendEvents(events)
     }
 

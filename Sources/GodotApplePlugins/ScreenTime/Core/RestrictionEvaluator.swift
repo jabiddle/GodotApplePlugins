@@ -353,6 +353,8 @@ public struct ShieldPlanner<App: Hashable, Category: Hashable, Web: Hashable> {
 
 /// The words of one block screen, and the block a button on it names.
 public struct ComposedShield: Equatable, Sendable {
+    /// Empty when the screen's block has no appearance and none is the fallback: the system's own
+    /// screen shows, and a button on it still names the block.
     public var appearanceId: String
     /// Empty only for the fallback screen over an app no block covers.
     public var slotId: String
@@ -366,15 +368,35 @@ public struct ComposedShield: Equatable, Sendable {
 /// word; this only joins them. A covering block whose appearance was never written is named only
 /// when no covering block has one: its screen shows the fallback words, and a button on it still
 /// routes to that block.
+///
+/// A button names no slot only when nothing the bridge holds explains the shield, which is how an
+/// identity the system changed reads (screen-time proposal §4.2): the blocks due now come first;
+/// then the slots the stores held at the last write, as that write saw them, since a shield stays
+/// up past its block's end until a wake lifts it; then a due block whose list cannot be read.
 public enum ShieldWords {
     public static func compose(slots: [String: SlotRecord], appearances: [String: [String: Any]], at unix: Int,
-                               calendar: Calendar, covers: (RestrictionBlock) -> Bool) -> ComposedShield? {
+                               calendar: Calendar, held: Set<String> = [], heldAt: Int = 0,
+                               unreadable: (RestrictionBlock) -> Bool = { _ in false },
+                               covers: (RestrictionBlock) -> Bool) -> ComposedShield? {
+        if let shield = screen(slots, appearances, at: unix, calendar: calendar, covers) {
+            return shield
+        }
+        if heldAt > 0,
+           let shield = screen(slots.filter { held.contains($0.key) }, appearances, at: heldAt, calendar: calendar, covers) {
+            return shield
+        }
+        return screen(slots, appearances, at: unix, calendar: calendar, unreadable) ?? fallback(appearances)
+    }
+
+    /// The screen of the slots whose blocks due at `unix` match, or nil when none does.
+    static func screen(_ slots: [String: SlotRecord], _ appearances: [String: [String: Any]], at unix: Int,
+                       calendar: Calendar, _ matches: (RestrictionBlock) -> Bool) -> ComposedShield? {
         var unnamed: [String] = []
         var covering: [(slotId: String, appearanceId: String, appearance: [String: Any], order: Int, ends: Int)] = []
         for slotId in slots.keys.sorted() {
             let record = slots[slotId]!
             guard RestrictionEvaluator.dueBlocks(slotId: slotId, record: record, at: unix, calendar: calendar)
-                .contains(where: { covers($0.block) }) else {
+                .contains(where: { matches($0.block) }) else {
                 continue
             }
             guard let appearance = appearances[record.spec.appearanceId] else {
@@ -385,7 +407,9 @@ public enum ShieldWords {
                              RestrictionEvaluator.holdsUntil(record, at: unix, calendar: calendar)))
         }
         guard !covering.isEmpty else {
-            return fallback(appearances, slotId: unnamed.first ?? "")
+            return unnamed.first.map {
+                fallback(appearances, slotId: $0) ?? ComposedShield(appearanceId: "", slotId: $0, title: "", subtitle: "")
+            }
         }
         covering.sort { $0.order == $1.order ? $0.slotId < $1.slotId : $0.order < $1.order }
         let first = covering[0]

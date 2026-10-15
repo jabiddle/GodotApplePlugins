@@ -106,6 +106,50 @@ final class ShieldWordsTests: XCTestCase {
         XCTAssertEqual(unmatched?.appearanceId, "first")
     }
 
+    func test_a_covering_block_with_no_appearance_names_its_slot_though_none_is_the_fallback() {
+        let shield = compose(["z": onceSpec(now - 60, now + 600, appearance: "missing")], [:])
+        XCTAssertEqual(shield, ComposedShield(appearanceId: "", slotId: "z", title: "", subtitle: ""))
+        XCTAssertNil(compose(["z": onceSpec(now - 60, now + 600, appearance: "missing")], [:], covers: { _ in false }))
+    }
+
+    func test_with_no_due_block_covering_the_slots_the_last_write_held_are_named_as_it_saw_them() {
+        let slots = ["ended": SlotRecord(spec: onceSpec(now - 3600, now - 60, appearance: "night")),
+                     "list": SlotRecord(spec: onceSpec(now - 60, now + 600, mode: .blockSelection, list: "l", appearance: "first"))]
+        let appearances = ["first": appearance("First", order: 0, until: "soon", fallback: true),
+                           "night": appearance("Night", order: 1, until: "07:00")]
+        let shield = { (held: Set<String>, heldAt: Int) in
+            ShieldWords.compose(slots: slots, appearances: appearances, at: self.now, calendar: testCalendar, held: held,
+                                heldAt: heldAt, covers: { $0.mode == .blockAll })
+        }
+        XCTAssertEqual(shield(["ended", "list"], now - 120),
+                       ComposedShield(appearanceId: "night", slotId: "ended", title: "Only Night", subtitle: "Until 07:00"))
+        XCTAssertEqual(shield(["ended", "list"], 0)?.slotId, "", "a store that recorded no instant names nothing held")
+        XCTAssertEqual(shield(["list"], now - 120)?.slotId, "", "a slot the last write did not hold explains no shield")
+    }
+
+    func test_a_due_block_that_covers_is_named_alone_before_any_the_last_write_held() {
+        let slots = ["ended": SlotRecord(spec: onceSpec(now - 3600, now - 60, appearance: "night")),
+                     "due": SlotRecord(spec: onceSpec(now - 60, now + 600, appearance: "first"))]
+        let appearances = ["first": appearance("First", order: 0, until: "soon", fallback: true),
+                           "night": appearance("Night", order: 1, until: "07:00")]
+        let shield = ShieldWords.compose(slots: slots, appearances: appearances, at: now, calendar: testCalendar,
+                                         held: ["ended", "due"], heldAt: now - 120, covers: { _ in true })
+        XCTAssertEqual(shield, ComposedShield(appearanceId: "first", slotId: "due", title: "Only First", subtitle: "Until soon"))
+    }
+
+    func test_a_due_block_whose_list_cannot_be_read_is_named_only_when_nothing_else_covers() {
+        let slots = ["a": SlotRecord(spec: onceSpec(now - 60, now + 600, mode: .blockSelection, list: "torn", appearance: "night")),
+                     "b": SlotRecord(spec: onceSpec(now - 60, now + 600, mode: .blockSelection, list: "fine", appearance: "first"))]
+        let appearances = ["first": appearance("First", order: 0, until: "soon", fallback: true),
+                           "night": appearance("Night", order: 1, until: "07:00")]
+        let shield = { (covers: (RestrictionBlock) -> Bool) in
+            ShieldWords.compose(slots: slots, appearances: appearances, at: self.now, calendar: testCalendar,
+                                unreadable: { $0.selectionId == "torn" }, covers: covers)?.slotId
+        }
+        XCTAssertEqual(shield { $0.selectionId == "fine" }, "b")
+        XCTAssertEqual(shield { _ in false }, "a")
+    }
+
     func test_a_block_not_due_covers_nothing() {
         let shield = compose(["one": onceSpec(now + 60, now + 600, appearance: "night")],
                              ["night": appearance("Night", order: 1, until: "07:00")])

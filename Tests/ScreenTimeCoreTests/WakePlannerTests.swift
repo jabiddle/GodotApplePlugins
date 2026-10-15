@@ -224,6 +224,24 @@ final class WakePlannerTests: XCTestCase {
         XCTAssertEqual(again.filter { $0.kind == PlannedWindow.roll }.sorted { $0.startUnix < $1.startUnix }, rolled)
     }
 
+    func test_a_roll_instant_on_a_running_windows_end_moves_a_minute_later_rather_than_waiting_on_that_end() {
+        var slots: [String: RestrictionSpec] = [:]
+        for index in 0..<12 {
+            slots["busy\(index)"] = dailySpec([1, 2, 3, 4, 5, 6, 7], index * 60, index * 60 + 30)
+        }
+        for index in 0..<6 {
+            slots["rare\(index)"] = dailySpec([2], 13 * 60 + index * 90, 13 * 60 + index * 90 + 45)
+        }
+        let rareTime = at(2026, 10, 13, 13, 0)
+        let release = PlannedWindow.once(PlannedWindow.release, start: rareTime - 900, end: rareTime)
+        let windows = WakePlanner.plan(slots: slots.mapValues { SlotRecord(spec: $0) }, now: rareTime - 840, calendar: testCalendar,
+                                       registered: [release])
+        let rolled = windows.filter { $0.kind == PlannedWindow.roll }
+        XCTAssertTrue(rolled.contains { $0.startUnix == rareTime + 60 }, "a minute late, a start, and never dropped")
+        XCTAssertFalse(rolled.contains { $0.startUnix == rareTime || $0.endUnix == rareTime })
+        XCTAssertTrue(windows.contains(release), "the running window keeps its end")
+    }
+
     func test_a_callback_stands_for_its_boundary_only_within_sixty_seconds() {
         let window = PlannedWindow.once(PlannedWindow.release, start: now + 3600, end: now + 4500)
         XCTAssertEqual(WakePlanner.evaluationInstant(window: window, isEnd: true, now: now + 4499, calendar: testCalendar), now + 4500,

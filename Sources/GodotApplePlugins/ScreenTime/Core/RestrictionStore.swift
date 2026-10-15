@@ -44,7 +44,7 @@ public final class RestrictionStore {
     static let schemaKey = "screen_time.schema"
     static let prefix = "screen_time.v1."
     static let objectNames = ["slots", "appearances", "list_names", "held", "degraded", "windows"]
-    static let numberNames = ["generation", "window_serial", "loss_reported"]
+    static let numberNames = ["generation", "window_serial", "loss_reported", "held_at"]
     /// A queue file past this size is rotated, so appending never has to read the queue.
     static let eventFileLimit = 64 * 1024
 
@@ -195,8 +195,16 @@ public final class RestrictionStore {
         return held
     }
 
-    public func setHeld(_ held: [String: HeldSlot]) {
+    /// `evaluation` is the instant the write was planned for: a shield left up past its block's end
+    /// until a wake lifts it is read as of then.
+    public func setHeld(_ held: [String: HeldSlot], at evaluation: Int) {
         setObject(held.mapValues { ["stores": $0.stores.sorted(), "generation": $0.generation] }, "held")
+        setNumber(evaluation, Self.prefix + "held_at")
+    }
+
+    /// The instant the last write of `held` was planned for; 0 before any write recorded one.
+    public var heldAt: Int {
+        number(Self.prefix + "held_at") ?? 0
     }
 
     /// Each slot that shields less than it asks, to the reason last reported for it.

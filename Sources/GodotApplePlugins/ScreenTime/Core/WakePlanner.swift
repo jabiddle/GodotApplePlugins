@@ -196,9 +196,22 @@ public enum WakePlanner {
             }
             upcoming.formUnion(instants[minute, default: []])
         }
-        let covered = Set(running.map(\.endUnix))
+        // A running roll window's end is one of the roll's own paired instants and keeps its place.
+        // An instant on any other running window's end moves a minute later, as releases and starts
+        // do, so its wake is its own rather than an end the system may not deliver.
+        let rollEnds = Set(running.filter { $0.kind == PlannedWindow.roll }.map(\.endUnix))
+        let runningEnds = Set(running.map(\.endUnix))
+        let keptMinutes = Set(kept)
+        var moved = Set<Int>()
+        for var instant in upcoming where !rollEnds.contains(instant) {
+            while runningEnds.contains(instant)
+                || (instant % 60 == 0 && keptMinutes.contains(RestrictionTime.minuteOfDay(instant, calendar: calendar))) {
+                instant += 60
+            }
+            moved.insert(instant)
+        }
         let room = max(0, rollingWindows - running.filter { $0.kind == PlannedWindow.roll }.count)
-        let next = upcoming.filter { $0 > now + leadSeconds && !covered.contains($0) }.sorted().prefix(room * 2)
+        let next = moved.filter { $0 > now + leadSeconds }.sorted().prefix(room * 2)
         return (pairDaily(kept), pairOnce(Array(next), limit: room))
     }
 
