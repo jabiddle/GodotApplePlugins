@@ -35,13 +35,16 @@ public final class DefaultsValues: SharedValues {
 ///
 /// Every value and file carries the schema version. A reader that finds another one writes nothing:
 /// the app and its extensions can be built from different revisions, and two evaluators would
-/// rewrite each other's shields.
+/// rewrite each other's shields. A value no revision could have written is refused alike, since
+/// read as empty the next write would replace everything it held, until a rebuild replaces it.
 public final class RestrictionStore {
     public static let schemaVersion = 1
     public static let eventQueueCap = 200
 
     static let schemaKey = "screen_time.schema"
     static let prefix = "screen_time.v1."
+    static let objectNames = ["slots", "appearances", "list_names", "held", "degraded", "windows"]
+    static let numberNames = ["generation", "window_serial", "loss_reported"]
     /// A queue file past this size is rotated, so appending never has to read the queue.
     static let eventFileLimit = 64 * 1024
 
@@ -77,18 +80,65 @@ public final class RestrictionStore {
 
     // MARK: Schema
 
+    public enum SchemaReading: Sendable {
+        case current
+        case otherVersion
+        case unparseable
+    }
+
     public var schemaMatches: Bool {
-        guard let stored = number(Self.schemaKey) else {
-            return true
+        schemaReading == .current
+    }
+
+    public var schemaReading: SchemaReading {
+        if let data = values.data(forKey: Self.schemaKey) {
+            guard let stored = Self.whole(data) else {
+                return .unparseable
+            }
+            if stored != Self.schemaVersion {
+                return .otherVersion
+            }
         }
-        return stored == Self.schemaVersion
+        return unparseableKeys().isEmpty ? .current : .unparseable
     }
 
     /// Stamps the version before the first write, so a reader of another version sees it.
     func claimSchema() {
-        if number(Self.schemaKey) == nil {
+        if values.data(forKey: Self.schemaKey) == nil {
             setNumber(Self.schemaVersion, Self.schemaKey)
         }
+    }
+
+    /// The values present that no revision wrote: an object that is no JSON object, a number that
+    /// is no whole one.
+    func unparseableKeys() -> [String] {
+        let objects = Self.objectNames.map { Self.prefix + $0 }.filter { key in
+            values.data(forKey: key).map { !((try? JSONSerialization.jsonObject(with: $0)) is [String: Any]) } ?? false
+        }
+        let numbers = Self.numberNames.map { Self.prefix + $0 }.filter { key in
+            values.data(forKey: key).map { Self.whole($0) == nil } ?? false
+        }
+        return objects + numbers
+    }
+
+    /// A rebuild's way out of a torn store: each value that cannot be parsed is removed, which reads
+    /// as empty at this version, and each list file that cannot be parsed is deleted. Answers whether
+    /// anything was. Only while no value is at another version.
+    public func resetUnparseable() -> Bool {
+        var torn = unparseableKeys()
+        if let data = values.data(forKey: Self.schemaKey), Self.whole(data) == nil {
+            torn.append(Self.schemaKey)
+        }
+        for key in torn {
+            values.setData(nil, forKey: key)
+        }
+        let tornLists = selectionIds().filter { !selectionParses($0) }
+        tornLists.forEach(deleteSelection)
+        guard !torn.isEmpty || !tornLists.isEmpty else {
+            return false
+        }
+        claimSchema()
+        return true
     }
 
     // MARK: Slots and bookkeeping
@@ -235,6 +285,16 @@ public final class RestrictionStore {
 
     func selectionURL(_ id: String) -> URL {
         directory.appendingPathComponent("sel-" + Self.fileKey(id) + ".json")
+    }
+
+    /// Whether any revision could have written the list's file: a JSON object with a whole-number
+    /// version. One this process cannot read is kept, as a file at another version is.
+    func selectionParses(_ id: String) -> Bool {
+        guard let data = try? Data(contentsOf: selectionURL(id)) else {
+            return true
+        }
+        let file = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        return WireJSON.whole(file?["schema"]) != nil
     }
 
     // MARK: The access record
@@ -450,10 +510,11 @@ public final class RestrictionStore {
     }
 
     func number(_ key: String) -> Int? {
-        guard let data = values.data(forKey: key), let text = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-        return Int(text)
+        values.data(forKey: key).flatMap(Self.whole)
+    }
+
+    static func whole(_ data: Data) -> Int? {
+        String(data: data, encoding: .utf8).flatMap { Int($0) }
     }
 
     func setNumber(_ value: Int, _ key: String) {

@@ -194,6 +194,21 @@ final class WakePlannerTests: XCTestCase {
         XCTAssertFalse(daily.contains(RestrictionTime.minuteOfDay(moved.endUnix, calendar: testCalendar)))
     }
 
+    func test_a_start_landing_on_a_daily_end_moves_a_minute_later_rather_than_waiting_on_that_end() {
+        let start = at(2026, 10, 12, 22, 0)
+        let evening = ["evening": dailySpec([1], 21 * 60, 22 * 60), "once": onceSpec(start, start + 3600)]
+        let opening = plan(evening).first { $0.kind == PlannedWindow.start }
+        XCTAssertEqual(opening?.startUnix, start + 60, "a minute late, never early, never dropped")
+
+        var crowded = evening
+        crowded["late"] = dailySpec([1], 22 * 60 + 1, 23 * 60)
+        let windows = plan(crowded)
+        let moved = windows.first { $0.kind == PlannedWindow.start }!
+        XCTAssertEqual(moved.startUnix, start + 120, "past every daily wake")
+        let daily = Set(windows.filter(\.repeats).flatMap { [$0.startMinute, $0.endMinute] })
+        XCTAssertFalse(daily.contains(RestrictionTime.minuteOfDay(moved.startUnix, calendar: testCalendar)))
+    }
+
     func test_a_running_roll_window_keeps_its_place_and_the_roll_does_not_move() {
         var slots: [String: RestrictionSpec] = [:]
         for index in 0..<12 {

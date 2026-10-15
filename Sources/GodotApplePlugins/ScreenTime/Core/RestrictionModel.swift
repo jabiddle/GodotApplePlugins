@@ -15,6 +15,8 @@ public enum RestrictionCode {
     public static let busy = "busy"
     public static let cancelled = "cancelled"
     public static let schemaMismatch = "schema_mismatch"
+    /// A rebuild's report that it replaced a value or file no revision could have written.
+    public static let storeReset = platform("store reset")
 
     public static func platform(_ text: String) -> String {
         "error: " + text

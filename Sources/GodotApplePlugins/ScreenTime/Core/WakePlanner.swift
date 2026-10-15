@@ -89,9 +89,9 @@ public enum WakePlanner {
         var starts = Set(running.map(\.startUnix))
         var kept: [PlannedWindow] = []
         for var window in once.sorted(by: { ($0.startUnix, $0.kind) < ($1.startUnix, $1.kind) }) where window.endUnix > now {
-            if window.kind == PlannedWindow.release {
-                // A lift waits on a start, which arrives, never on an end the system may not deliver:
-                // a minute late, never early.
+            if window.kind != PlannedWindow.roll {
+                // A block's change waits on a start, which arrives, never on an end the system may
+                // not deliver: a minute late, never early.
                 while landsOnAWake(window.startUnix) {
                     window.startUnix += 60
                     window.endUnix += 60
@@ -100,7 +100,7 @@ public enum WakePlanner {
             if running.contains(where: { $0.sameInterval(window) }) {
                 continue
             }
-            if window.kind != PlannedWindow.release && landsOnAWake(window.startUnix) {
+            if landsOnAWake(window.startUnix) {
                 continue
             }
             // Another window's start wakes here already.

@@ -393,15 +393,18 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
     /// Stops every window, blocks then unblocks every store name, renews every list where the
     /// system can, and applies again from the slots under a new generation, in one call. A clear
     /// alone is not known to lift a shield a deleted install left behind; a block and an unblock is.
+    /// A value at another version refuses it; one that cannot be parsed it replaces first, and says
+    /// so in `errors`, since every other call refuses that store until then.
     public func rebuild() -> String {
         store.withLock {
-            guard store.schemaMatches else {
+            guard store.schemaReading != .otherVersion else {
                 return Tally(errors: [RestrictionCode.schemaMismatch]).answer(expired: [])
             }
             let now = clock()
             guard markerChecked(now: now) else {
                 return Tally(errors: [RestrictionCode.notAuthorized]).answer(expired: [])
             }
+            let reset = store.resetUnparseable()
             var readBack: [String: Contents] = [:]
             for name in ShieldStoreName.fixedSet {
                 readBack[name] = shields.read(store: name)
@@ -419,7 +422,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
             }
             shields.deleteListedStores()
             renewSelections()
-            var tally = Tally()
+            var tally = Tally(errors: reset ? [RestrictionCode.storeReset] : [])
             apply(at: now, now: now, tally: &tally, heldBefore: heldBefore)
             tally.lifted = heldBefore.count + strays
             tally.applied = store.held().count

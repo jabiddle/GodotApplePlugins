@@ -422,6 +422,41 @@ final class RestrictionEnforcerTests: XCTestCase {
         XCTAssertTrue(h.shields.writes.filter { $0.name != ShieldStoreName.marker }.isEmpty)
     }
 
+    func test_a_value_that_cannot_be_parsed_is_refused_until_a_rebuild_replaces_it_and_says_so() {
+        let h = harness()
+        h.put("allowed", apps: ["x"])
+        XCTAssertEqual(h.set("a", onceSpec(now - 60, now + 3600, except: "allowed")), "")
+        h.values.values[RestrictionStore.schemaKey] = Data("v1".utf8)
+        h.values.values[RestrictionStore.prefix + "appearances"] = Data("{\"shown\":".utf8)
+        try? Data("{\"sche".utf8).write(to: h.store.selectionURL("torn"))
+        XCTAssertEqual(h.set("b", onceSpec(now - 60, now + 3600)), "schema_mismatch")
+        XCTAssertEqual(h.enforcer.setAppearance(id: "x", json: "{}", image: nil), "schema_mismatch")
+        XCTAssertEqual(WireJSON.object(h.enforcer.reconcile(listed: nil))?["errors"] as? [String], ["schema_mismatch"])
+        XCTAssertNotNil(h.values.values[RestrictionStore.prefix + "appearances"], "nothing but a rebuild replaces it")
+
+        XCTAssertEqual(WireJSON.object(h.enforcer.rebuild())?["errors"] as? [String], ["error: store reset"])
+        XCTAssertEqual(h.values.values[RestrictionStore.schemaKey], Data("1".utf8))
+        XCTAssertNil(h.values.values[RestrictionStore.prefix + "appearances"])
+        XCTAssertFalse(h.store.hasSelection("torn"))
+        XCTAssertTrue(h.store.hasSelection("allowed"), "what it can read it keeps")
+        XCTAssertEqual(h.slot("a")["active"] as? Bool, true)
+        XCTAssertEqual(h.set("b", onceSpec(now - 60, now + 3600)), "")
+        XCTAssertEqual(WireJSON.object(h.enforcer.rebuild())?["errors"] as? [String], [], "a store read whole is not reset again")
+    }
+
+    func test_a_rebuild_never_overwrites_a_store_another_version_wrote_even_beside_a_torn_value() {
+        let h = harness()
+        XCTAssertEqual(h.set("a", onceSpec(now - 60, now + 3600)), "")
+        let torn = Data("[".utf8)
+        h.values.values[RestrictionStore.schemaKey] = Data("2".utf8)
+        h.values.values[RestrictionStore.prefix + "held"] = torn
+        let writes = h.shields.writes.count
+        XCTAssertEqual(WireJSON.object(h.enforcer.rebuild())?["errors"] as? [String], ["schema_mismatch"])
+        XCTAssertEqual(h.values.values[RestrictionStore.prefix + "held"], torn)
+        XCTAssertEqual(h.values.values[RestrictionStore.schemaKey], Data("2".utf8))
+        XCTAssertEqual(h.shields.writes.count, writes)
+    }
+
     func test_the_queue_keeps_the_newest_two_hundred_and_a_drain_consumes_them() {
         let h = harness()
         for index in 0..<250 {
