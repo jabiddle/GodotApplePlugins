@@ -127,6 +127,41 @@ final class ShieldWordsTests: XCTestCase {
         XCTAssertEqual(shield(["list"], now - 120)?.slotId, "", "a slot the last write did not hold explains no shield")
     }
 
+    func test_a_daily_block_the_last_write_held_is_named_after_the_time_zone_moves() {
+        let h = Harness(now: at(2026, 10, 12, 10, 0))
+        h.approve()
+        h.put("work", apps: ["x"])
+        h.put("evening", apps: ["y"])
+        for (id, json) in [("first", appearance("First", order: 0, until: "soon", fallback: true)),
+                           ("work", appearance("Work", order: 1, until: "17:00")),
+                           ("evening", appearance("Evening", order: 2, until: "23:00"))] {
+            XCTAssertEqual(h.enforcer.setAppearance(id: id, json: WireJSON.text(json), image: nil), "")
+        }
+        let everyDay = [1, 2, 3, 4, 5, 6, 7]
+        requireSuccess(h.set("work", dailySpec(everyDay, 9 * 60, 17 * 60, mode: .blockSelection, list: "work",
+                                                 appearance: "work")))
+        requireSuccess(h.set("evening", dailySpec(everyDay, 18 * 60, 23 * 60, mode: .blockSelection, list: "evening",
+                                                    appearance: "evening")))
+        _ = h.drain()
+        XCTAssertEqual(h.store.held().keys.sorted(), ["work"])
+        // Three hours west, 10:30 at the write's zone reads 07:30: neither now nor the write's instant
+        // falls inside 09:00 to 17:00 there, while the stores still hold the period.
+        var west = testCalendar
+        west.timeZone = TimeZone(secondsFromGMT: 3600 - 3 * 3600)!
+        h.enforcer.calendar = west
+        h.now += 30 * 60
+        let shield = { (app: String) in h.enforcer.composeShield(covers: h.enforcer.coverage(app: app, category: nil, web: nil)) }
+        XCTAssertEqual(shield("x"), ComposedShield(appearanceId: "work", slotId: "work", title: "Only Work", subtitle: "Until 17:00"))
+        XCTAssertEqual(shield("y")?.slotId, "", "a slot the last write did not hold explains no shield")
+        XCTAssertEqual(ShieldWords.compose(slots: h.store.slots(), appearances: h.store.appearances(), at: h.now, calendar: west,
+                                           held: ["work"], heldAt: h.now - 1800, covers: { _ in true })?.slotId, "work")
+        var suspended = h.store.slots()
+        suspended["work"]!.suspendedUntil = h.now
+        XCTAssertEqual(ShieldWords.compose(slots: suspended, appearances: h.store.appearances(), at: h.now, calendar: west,
+                                           held: ["work"], heldAt: h.now - 1800, covers: { _ in true })?.slotId, "",
+                       "a slot suspended at the write held nothing then")
+    }
+
     func test_a_due_block_that_covers_is_named_alone_before_any_the_last_write_held() {
         let slots = ["ended": SlotRecord(spec: onceSpec(now - 3600, now - 60, appearance: "night")),
                      "due": SlotRecord(spec: onceSpec(now - 60, now + 600, appearance: "first"))]

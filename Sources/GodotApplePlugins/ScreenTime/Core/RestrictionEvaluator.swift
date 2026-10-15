@@ -101,6 +101,19 @@ public enum RestrictionEvaluator {
         return blocks
     }
 
+    /// What a slot the stores held at the last write, planned for `heldAt`, held then. That write read
+    /// a `daily` window in its own calendar, so where the calendar read now places none of the
+    /// slot's blocks at that instant, as after a time-zone change, its own block is what they held.
+    public static func heldBlocks(slotId: String, record: SlotRecord, at heldAt: Int, calendar: Calendar) -> [DueBlock] {
+        let blocks = dueBlocks(slotId: slotId, record: record, at: heldAt, calendar: calendar)
+        guard blocks.isEmpty, case .daily = record.spec.window, heldAt >= record.suspendedUntil else {
+            return blocks
+        }
+        let block = record.spec.block
+        return [DueBlock(slotId: slotId, block: block, retained: false,
+                         listKey: block.mode == .blockSelection ? block.selectionId : "")]
+    }
+
     public static func isDue(_ record: SlotRecord, at unix: Int, calendar: Calendar) -> Bool {
         !dueBlocks(slotId: "", record: record, at: unix, calendar: calendar).isEmpty
     }
@@ -372,7 +385,8 @@ public struct ComposedShield: Equatable, Sendable {
 /// A button names no slot only when nothing the bridge holds explains the shield, which is how an
 /// identity the system changed reads (screen-time proposal §4.2): the blocks due now come first;
 /// then the slots the stores held at the last write, as that write saw them, since a shield stays
-/// up past its block's end until a wake lifts it; then a due block whose list cannot be read.
+/// up past its block's end until a wake lifts it, and a `daily` one by its own block where the
+/// calendar has moved since; then a due block whose list cannot be read.
 public enum ShieldWords {
     public static func compose(slots: [String: SlotRecord], appearances: [String: [String: Any]], at unix: Int,
                                calendar: Calendar, held: Set<String> = [], heldAt: Int = 0,
@@ -382,21 +396,25 @@ public enum ShieldWords {
             return shield
         }
         if heldAt > 0,
-           let shield = screen(slots.filter { held.contains($0.key) }, appearances, at: heldAt, calendar: calendar, covers) {
+           let shield = screen(slots.filter { held.contains($0.key) }, appearances, at: heldAt, calendar: calendar,
+                               held: true, covers) {
             return shield
         }
         return screen(slots, appearances, at: unix, calendar: calendar, unreadable) ?? fallback(appearances)
     }
 
-    /// The screen of the slots whose blocks due at `unix` match, or nil when none does.
+    /// The screen of the slots whose blocks due at `unix`, or with `held` held then, match, or nil
+    /// when none does.
     static func screen(_ slots: [String: SlotRecord], _ appearances: [String: [String: Any]], at unix: Int,
-                       calendar: Calendar, _ matches: (RestrictionBlock) -> Bool) -> ComposedShield? {
+                       calendar: Calendar, held: Bool = false, _ matches: (RestrictionBlock) -> Bool) -> ComposedShield? {
         var unnamed: [String] = []
         var covering: [(slotId: String, appearanceId: String, appearance: [String: Any], order: Int, ends: Int)] = []
         for slotId in slots.keys.sorted() {
             let record = slots[slotId]!
-            guard RestrictionEvaluator.dueBlocks(slotId: slotId, record: record, at: unix, calendar: calendar)
-                .contains(where: { matches($0.block) }) else {
+            let blocks = held
+                ? RestrictionEvaluator.heldBlocks(slotId: slotId, record: record, at: unix, calendar: calendar)
+                : RestrictionEvaluator.dueBlocks(slotId: slotId, record: record, at: unix, calendar: calendar)
+            guard blocks.contains(where: { matches($0.block) }) else {
                 continue
             }
             guard let appearance = appearances[record.spec.appearanceId] else {
