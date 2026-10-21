@@ -3,7 +3,7 @@ import XCTest
 
 /// One block screen from the host's appearances: a block's own words, two blocks joined by their
 /// order with the later end, and the fallback screen for an app no block matches or a block with
-/// no appearance.
+/// no appearance; composed without the store's lock.
 final class ShieldWordsTests: XCTestCase {
     let now = at(2026, 10, 12, 22, 30)
 
@@ -104,6 +104,35 @@ final class ShieldWordsTests: XCTestCase {
         let unmatched = h.enforcer.composeShield { _ in false }
         XCTAssertEqual(unmatched?.slotId, "")
         XCTAssertEqual(unmatched?.appearanceId, "first")
+    }
+
+    func test_a_block_screen_is_composed_while_another_process_holds_the_lock() {
+        let h = Harness(now: now)
+        h.approve()
+        XCTAssertEqual(h.enforcer.setAppearance(id: "first", json: WireJSON.text(appearance("First", order: 0, until: "soon", fallback: true)),
+                                                image: nil), "")
+        _ = h.set("one", onceSpec(now - 60, now + 600, appearance: "first"))
+        let holding = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let ending = DispatchSemaphore(value: 0)
+        Thread {
+            h.store.withLock {
+                holding.signal()
+                // Bounded, so a composition that waits for the lock fails below rather than hanging.
+                _ = release.wait(timeout: .now() + 2)
+                ending.signal()
+            }
+        }.start()
+        holding.wait()
+        let shield = h.enforcer.composeShield(covers: h.enforcer.coverage(app: "x", category: nil, web: nil))
+        let waited = ending.wait(timeout: .now()) == .success
+        release.signal()
+        if !waited {
+            ending.wait()
+        }
+        XCTAssertFalse(waited, "the configuration extension cannot open the lock's file, so composing never waits for it")
+        XCTAssertEqual(shield?.slotId, "one")
+        XCTAssertEqual(shield?.title, "Only First")
     }
 
     func test_a_covering_block_with_no_appearance_names_its_slot_though_none_is_the_fallback() {

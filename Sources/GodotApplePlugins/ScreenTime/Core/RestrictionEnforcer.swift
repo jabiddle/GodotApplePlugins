@@ -549,16 +549,19 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
     /// The block screen over what `covers` matches, from the host's appearances and the slots the
     /// stores held at the last write: nil when no block covers it and no appearance is the fallback,
     /// or while the store is at another version or cannot be parsed, when a button records nothing.
+    ///
+    /// Takes no lock, because the configuration extension cannot: its sandbox opens nothing in the
+    /// App Group for writing, the lock's file included, and iOS draws its own screen in place of one
+    /// that waits (screen-time proposal §4.4). A caller that records against the screen holds the
+    /// lock around this, as the action extension does.
     public func composeShield(covers: (RestrictionBlock) -> Bool) -> ComposedShield? {
-        store.withLock {
-            guard store.schemaMatches else {
-                return nil
-            }
-            return ShieldWords.compose(slots: store.slots(), appearances: store.appearances(), at: clock(), calendar: calendar,
-                                       held: Set(store.held().keys), heldAt: store.heldAt,
-                                       unreadable: { $0.mode == .blockSelection && self.selection($0.selectionId) == nil },
-                                       covers: covers)
+        guard store.schemaMatches else {
+            return nil
         }
+        return ShieldWords.compose(slots: store.slots(), appearances: store.appearances(), at: clock(), calendar: calendar,
+                                   held: Set(store.held().keys), heldAt: store.heldAt,
+                                   unreadable: { $0.mode == .blockSelection && self.selection($0.selectionId) == nil },
+                                   covers: covers)
     }
 
     /// A button pressed on a block screen, dated, naming the block the screen named; `""` only when
