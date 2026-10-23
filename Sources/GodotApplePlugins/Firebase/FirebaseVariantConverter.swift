@@ -8,6 +8,7 @@
 import Foundation
 @preconcurrency import SwiftGodotRuntime
 import FirebaseFirestore
+import FirestoreValueCore
 
 enum FirebaseVariantConverter {
     static func variantToAny(_ variant: Variant?) -> Any {
@@ -47,9 +48,12 @@ enum FirebaseVariantConverter {
     
     static func anyToVariant(_ value: Any) -> Variant? {
         if value is NSNull { return nil }
-        if let intVal = value as? Int { return Variant(intVal) }
-        if let doubleVal = value as? Double { return Variant(doubleVal) }
-        if let boolVal = value as? Bool { return Variant(boolVal) }
+        switch FirestoreScalar(value) {
+        case .bool(let boolVal): return Variant(boolVal)
+        case .int(let intVal): return Variant(intVal)
+        case .double(let doubleVal): return Variant(doubleVal)
+        case nil: break
+        }
         if let stringVal = value as? String { return Variant(stringVal) }
         if let timestamp = value as? Timestamp { return Variant(timestamp.dateValue().timeIntervalSince1970) }
         if let geoPoint = value as? GeoPoint {

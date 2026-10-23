@@ -52,12 +52,14 @@ let package = Package(
                 .product(name: "FirebaseCrashlytics", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseStorage", package: "firebase-ios-sdk"),
                 .product(name: "FirebaseMessaging", package: "firebase-ios-sdk"),
-                "ScreenTimeCore"
+                "ScreenTimeCore",
+                "FirestoreValueCore"
             ],
             exclude: [
                 "GameCenter/GameCenterGuide.md",
                 "GameCenter/Entitlements.md",
-                "ScreenTime/Core"
+                "ScreenTime/Core",
+                "Firebase/Core"
             ],
             swiftSettings: swiftSettings,
             linkerSettings: linkerSettings
@@ -71,6 +73,15 @@ let package = Package(
         .testTarget(
             name: "ScreenTimeCoreTests",
             dependencies: ["ScreenTimeCore"]
+        ),
+        // Foundation only, so how a Firestore value maps onto a Godot type is tested on the host.
+        .target(
+            name: "FirestoreValueCore",
+            path: "Sources/GodotApplePlugins/Firebase/Core"
+        ),
+        .testTarget(
+            name: "FirestoreValueCoreTests",
+            dependencies: ["FirestoreValueCore"]
         ),
     ]
 )
