@@ -83,6 +83,17 @@ public final class ManagedShieldBackend: ShieldBackend {
 #endif
     }
 
+    /// Whether `renew` asks the system for new tokens rather than answering `unavailable`. True
+    /// where a list the system cannot renew is reported expired, and nowhere else.
+    public static var renewsTokens: Bool {
+#if IPHONEOS_SDK_26_5_OR_LATER
+        if #available(iOS 26.5, *) {
+            return true
+        }
+#endif
+        return false
+    }
+
     public func renew(_ selection: TokenSelection<ApplicationToken, ActivityCategoryToken, WebDomainToken>)
         -> TokenRenewal<ApplicationToken, ActivityCategoryToken, WebDomainToken> {
 #if IPHONEOS_SDK_26_5_OR_LATER

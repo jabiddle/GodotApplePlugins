@@ -75,7 +75,8 @@ class ScreenTimeManager: RefCounted, @unchecked Sendable {
         }
         return WireJSON.text(["selection_editor": "system_sheet", "max_selection_items": 50,
                               "min_window_seconds": WakePlanner.minimumWindowSeconds, "max_windows": WakePlanner.windowBudget,
-                              "web_domains": true, "shield_opens_app": opensApp, "manufacturer": "apple"])
+                              "web_domains": true, "shield_opens_app": opensApp,
+                              "renews_tokens": ManagedShieldBackend.renewsTokens, "manufacturer": "apple"])
 #else
         return "{}"
 #endif
