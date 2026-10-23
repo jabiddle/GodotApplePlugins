@@ -35,6 +35,32 @@ public enum TokenRenewal<App: Hashable, Category: Hashable, Web: Hashable> {
     case unavailable
     case renewed(TokenSelection<App, Category, Web>)
     case failed
+
+    /// Renews each kind of token `selection` holds through the platform's call for that kind. A call
+    /// that throws, or answers a different number of tokens than it was given, fails the whole list:
+    /// one that silently lost an app would loosen a block it holds, and old tokens usually still shield.
+    public static func renewing(_ selection: TokenSelection<App, Category, Web>,
+                                apps: (inout [App]) throws -> Void,
+                                categories: (inout [Category]) throws -> Void,
+                                web: (inout [Web]) throws -> Void) -> Self {
+        func renew<Token: Hashable>(_ tokens: Set<Token>, _ refresh: (inout [Token]) throws -> Void) -> Set<Token>? {
+            guard !tokens.isEmpty else {
+                return tokens
+            }
+            var renewed = Array(tokens)
+            do {
+                try refresh(&renewed)
+            } catch {
+                return nil
+            }
+            return renewed.count == tokens.count ? Set(renewed) : nil
+        }
+        guard let renewedApps = renew(selection.apps, apps), let renewedCategories = renew(selection.categories, categories),
+              let renewedWeb = renew(selection.web, web) else {
+            return .failed
+        }
+        return .renewed(TokenSelection(apps: renewedApps, categories: renewedCategories, web: renewedWeb))
+    }
 }
 
 /// The named stores the shields live in.
@@ -48,8 +74,9 @@ public protocol ShieldBackend: AnyObject {
     func write(store name: String, contents: ShieldContents<App, Category, Web>)
     func markerHolds() -> Bool
     func writeMarker()
-    /// Deletes every store the system lists for this app, where the system can list them.
-    func deleteListedStores()
+    /// Deletes every store the system lists for this app but those named in `names`, where the
+    /// system can list them.
+    func deleteListedStores(keeping names: Set<String>)
     func renew(_ selection: TokenSelection<App, Category, Web>) -> TokenRenewal<App, Category, Web>
 }
 
@@ -84,8 +111,8 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
     /// The platform's per-app cap in every class.
     public var cap = 50
     /// How long a wake waits for another process's hold before it skips, leaving the next wake or
-    /// the app's reconcile to catch up. Longer than the app's longest hold, a reconcile that lists
-    /// the system's windows, so a wake skips only behind a hold that is stuck.
+    /// the app's reconcile to catch up. Longer than the app's longest hold, a reconcile that renews
+    /// every list and lists the system's windows, so a wake skips only behind a hold that is stuck.
     public var wakeLockSeconds: TimeInterval = 5
     let clock: () -> Int
 
@@ -369,10 +396,11 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
         }
     }
 
-    /// Compares what should hold now with what the stores and windows read back, and writes only
-    /// the difference. `listed` is the system's own list of windows, read by the app alone, and
-    /// read under the lock: a list read before it is stale against a wake that registered or
-    /// stopped a window meanwhile, and the difference would stop that wake's new window.
+    /// Renews every list where the system can, then compares what should hold now with what the
+    /// stores and windows read back, and writes only the difference. `listed` is the system's own
+    /// list of windows, read by the app alone, and read under the lock: a list read before it is
+    /// stale against a wake that registered or stopped a window meanwhile, and the difference would
+    /// stop that wake's new window.
     public func reconcile(listed: @autoclosure () -> [String: PlannedWindow]?) -> String {
         store.withLock {
             guard store.schemaMatches else {
@@ -383,6 +411,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
             guard markerChecked(now: now) else {
                 return Tally(errors: [RestrictionCode.notAuthorized]).answer(expired: [])
             }
+            renewSelections()
             var tally = Tally()
             apply(at: now, now: now, tally: &tally)
             commitWindows(windowChange(slots: store.slots(), now: now, listed: listed()), tally: &tally)
@@ -420,7 +449,7 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
                 shields.write(store: name, contents: .everything)
                 shields.write(store: name, contents: Contents())
             }
-            shields.deleteListedStores()
+            shields.deleteListedStores(keeping: Set(ShieldStoreName.fixedSet + [ShieldStoreName.marker]))
             renewSelections()
             var tally = Tally(errors: reset ? [RestrictionCode.storeReset] : [])
             apply(at: now, now: now, tally: &tally, heldBefore: heldBefore)
@@ -434,31 +463,36 @@ public final class RestrictionEnforcer<Shields: ShieldBackend>: @unchecked Senda
     }
 
     /// The system's message that tokens expired, which fires falsely for new users, so it is ignored
-    /// while no list is held.
+    /// while no list is held. Ignored without access too, where every renewal would fail and mark
+    /// every list expired.
     public func tokensDidExpire() {
         store.withLock {
-            guard store.schemaMatches, !store.selectionIds().isEmpty else {
+            guard store.schemaMatches, !store.selectionIds().isEmpty, markerChecked(now: clock()) else {
                 return
             }
             renewSelections()
         }
     }
 
+    /// Every list file in one pass, a retained part's own file among them, before anything is
+    /// written from them. A file is written only when its renewal changed it.
     func renewSelections() {
         for id in store.selectionIds() {
             guard let held = selection(id) else {
                 continue
             }
+            var next = held
             switch shields.renew(held) {
             case .unavailable:
                 continue
-            case .renewed(var renewed):
-                renewed.expired = false
-                store.setSelection(renewed, id: id)
+            case let .renewed(renewed):
+                next = renewed
+                next.expired = false
             case .failed:
-                var expired = held
-                expired.expired = true
-                store.setSelection(expired, id: id)
+                next.expired = true
+            }
+            if next != held {
+                store.setSelection(next, id: id)
             }
         }
     }

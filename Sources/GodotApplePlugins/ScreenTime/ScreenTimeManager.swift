@@ -40,6 +40,8 @@ class ScreenTimeManager: RefCounted, @unchecked Sendable {
     private var presenting = false
     private var statusSubscription: AnyCancellable?
     private var observers: [NSObjectProtocol] = []
+    /// Observes until released, so it is kept for this object's life.
+    private var tokenExpiryObservation: Any?
 #endif
 
     required init(_ context: InitContext) {
@@ -413,6 +415,20 @@ class ScreenTimeManager: RefCounted, @unchecked Sendable {
                 })
             }
         }
+        // Declared only by an iOS 26.5 SDK (ManagedBackends.swift). Delivered on any thread, so it
+        // hops to the main one, where every other call into the enforcer runs.
+#if IPHONEOS_SDK_26_5_OR_LATER
+        if #available(iOS 26.5, *) {
+            tokenExpiryObservation = NotificationCenter.default.addObserver(for: ManagedSettingsStore.TokenExpiryMessage.self) { [weak self] _ in
+                guard let manager = self else {
+                    return
+                }
+                await MainActor.run {
+                    manager.enforcer?.tokensDidExpire()
+                }
+            }
+        }
+#endif
         if enforcer.store.hasQueuedEvents {
             announceEvents()
         }

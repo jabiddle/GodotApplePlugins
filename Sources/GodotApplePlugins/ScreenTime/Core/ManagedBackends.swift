@@ -67,15 +67,32 @@ public final class ManagedShieldBackend: ShieldBackend {
         store(ShieldStoreName.marker).media.denyExplicitContent = false
     }
 
-    /// iOS 26.5 lists an app's stores and deletes them, which reaches a name an older build used.
-    /// Not called yet: its signature is to be confirmed against the 26.5 SDK.
-    public func deleteListedStores() {}
+    // Only an iOS 26.5 SDK declares the calls below, and an availability check cannot hide a name
+    // the SDK lacks, so the Makefile defines IPHONEOS_SDK_26_5_OR_LATER from the SDK it builds with.
+    // Without it, as in an app extension's build, nothing is deleted and no list is ever expired.
 
-    /// iOS 26.5 renews a selection's tokens. Not called yet: its signature is to be confirmed against
-    /// the 26.5 SDK, and until then no list is ever reported expired, as below 26.5.
+    /// From iOS 26.5, reaches a name an older build used.
+    public func deleteListedStores(keeping names: Set<String>) {
+#if IPHONEOS_SDK_26_5_OR_LATER
+        if #available(iOS 26.5, *) {
+            let stray = ManagedSettingsStore.stores.subtracting(names.map { ManagedSettingsStore.Name($0) })
+            if !stray.isEmpty {
+                ManagedSettingsStore.deleteStores(stray)
+            }
+        }
+#endif
+    }
+
     public func renew(_ selection: TokenSelection<ApplicationToken, ActivityCategoryToken, WebDomainToken>)
         -> TokenRenewal<ApplicationToken, ActivityCategoryToken, WebDomainToken> {
-        .unavailable
+#if IPHONEOS_SDK_26_5_OR_LATER
+        if #available(iOS 26.5, *) {
+            return .renewing(selection, apps: { try ManagedSettingsStore.refresh(&$0) },
+                             categories: { try ManagedSettingsStore.refresh(&$0) },
+                             web: { try ManagedSettingsStore.refresh(&$0) })
+        }
+#endif
+        return .unavailable
     }
 }
 

@@ -103,7 +103,12 @@ final class FakeShields: ShieldBackend {
         marker = true
     }
 
-    func deleteListedStores() {}
+    /// The names each rebuild asked to keep.
+    var kept: [Set<String>] = []
+
+    func deleteListedStores(keeping names: Set<String>) {
+        kept.append(names)
+    }
 
     func renew(_ selection: Selection) -> TokenRenewal<String, String, String> {
         renewal?(selection) ?? .unavailable

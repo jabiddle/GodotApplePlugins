@@ -546,6 +546,98 @@ final class RestrictionEnforcerTests: XCTestCase {
         XCTAssertEqual(WireJSON.object(h.enforcer.reconcile(listed: nil))?["expired_selections"] as? [String], ["bad"])
     }
 
+    func test_token_expiry_without_access_renews_nothing_since_every_renewal_would_fail() {
+        let h = harness()
+        h.put("l", apps: ["x"])
+        var asked = 0
+        h.shields.renewal = { _ in
+            asked += 1
+            return .failed
+        }
+        h.shields.marker = false
+        h.enforcer.tokensDidExpire()
+        XCTAssertEqual(asked, 0)
+        XCTAssertEqual(WireJSON.object(h.enforcer.summary("l"))?["expired"] as? Bool, false)
+    }
+
+    func test_a_renewal_asks_once_for_each_kind_a_list_holds_and_fails_the_list_on_a_throw_or_a_lost_token() {
+        struct Refused: Error {}
+        typealias Renewal = TokenRenewal<String, String, String>
+        func renewed(_ renewal: Renewal) -> Selection? {
+            if case let .renewed(selection) = renewal {
+                return selection
+            }
+            return nil
+        }
+        func failed(_ renewal: Renewal) -> Bool {
+            if case .failed = renewal {
+                return true
+            }
+            return false
+        }
+        let held = Selection(apps: ["a1", "a2"], categories: ["c1"], expired: true)
+        var asked: [String] = []
+        let renewal: Renewal = .renewing(held, apps: { tokens in
+            asked.append("apps")
+            tokens = tokens.map { "new-" + $0 }
+        }, categories: { tokens in
+            asked.append("categories")
+            tokens = tokens.map { "new-" + $0 }
+        }, web: { _ in
+            asked.append("web")
+        })
+        XCTAssertEqual(renewed(renewal), Selection(apps: ["new-a1", "new-a2"], categories: ["new-c1"]))
+        XCTAssertEqual(asked, ["apps", "categories"], "a kind the list holds none of is never asked")
+        XCTAssertTrue(failed(.renewing(held, apps: { _ in }, categories: { _ in throw Refused() }, web: { _ in })))
+        XCTAssertTrue(failed(.renewing(held, apps: { _ = $0.removeLast() }, categories: { _ in }, web: { _ in })),
+                      "a list that lost a token would loosen the block it holds")
+        XCTAssertEqual(renewed(.renewing(held, apps: { tokens in tokens = tokens.map { _ in "one" } }, categories: { _ in },
+                                         web: { _ in }))?.apps, ["one"], "two tokens renewed to one app are that app")
+    }
+
+    func test_reconcile_renews_every_list_and_retained_part_before_it_writes_and_reports_only_a_failed_one_expired() {
+        let h = harness()
+        h.put("now", apps: ["x"])
+        h.put("kept", apps: ["y"])
+        h.put("stale", apps: ["z"])
+        let retained = RetainedBlock(block: RestrictionBlock(mode: .blockSelection, selectionId: "kept"), untilUnix: now + 1800)
+        _ = h.set("a", onceSpec(now - 60, now + 3600, mode: .blockSelection, list: "now", retained: retained))
+        _ = h.drain()
+        var asked: [Selection] = []
+        h.shields.renewal = { selection in
+            asked.append(selection)
+            return selection.apps.contains("z") ? .failed : .renewed(Selection(apps: Set(selection.apps.map { "new-" + $0 })))
+        }
+        let answer = WireJSON.object(h.enforcer.reconcile(listed: nil))!
+        XCTAssertEqual(asked.count, 3, "every list file in one pass")
+        XCTAssertEqual(answer["expired_selections"] as? [String], ["stale"])
+        XCTAssertEqual(h.enforcer.selection("now"), Selection(apps: ["new-x"]))
+        XCTAssertEqual(h.enforcer.selection("kept"), Selection(apps: ["new-y"]))
+        XCTAssertEqual(h.enforcer.selection("stale"), Selection(apps: ["z"], expired: true), "a list not renewed keeps its tokens")
+        XCTAssertEqual(h.shields.stores["list1"]?.apps, ["new-x", "new-y"], "the stores take the renewed tokens in the same call")
+        XCTAssertTrue(h.drain().isEmpty, "a block whose tokens were renewed is announced neither ended nor started")
+    }
+
+    func test_a_list_renewed_after_a_failure_reads_expired_no_longer_and_nothing_expires_where_renewal_is_unavailable() {
+        let h = harness()
+        h.put("l", apps: ["x"])
+        XCTAssertEqual(WireJSON.object(h.enforcer.reconcile(listed: nil))?["expired_selections"] as? [String], [])
+        h.shields.renewal = { _ in .failed }
+        XCTAssertEqual(WireJSON.object(h.enforcer.rebuild())?["expired_selections"] as? [String], ["l"])
+        h.shields.renewal = { .renewed($0) }
+        XCTAssertEqual(WireJSON.object(h.enforcer.reconcile(listed: nil))?["expired_selections"] as? [String], [])
+        XCTAssertEqual(WireJSON.object(h.enforcer.summary("l"))?["expired"] as? Bool, false)
+        XCTAssertEqual(h.enforcer.selection("l"), Selection(apps: ["x"]))
+    }
+
+    func test_a_rebuild_deletes_only_listed_stores_outside_the_fixed_names_and_the_marker() {
+        let h = harness()
+        _ = h.enforcer.rebuild()
+        XCTAssertEqual(h.shields.kept, [Set(ShieldStoreName.fixedSet + [ShieldStoreName.marker])])
+        _ = h.enforcer.reconcile(listed: nil)
+        XCTAssertEqual(h.shields.kept.count, 1, "only a rebuild deletes stores")
+    }
+
     func test_an_appearance_needs_an_id_and_an_object_and_clears_with_its_image() {
         let h = harness()
         XCTAssertEqual(h.enforcer.setAppearance(id: "", json: "{}", image: nil), "invalid_spec")

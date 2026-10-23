@@ -7,6 +7,11 @@ FRAMEWORK_NAMES ?= GodotApplePlugins
 XCODEBUILD ?= xcodebuild
 XCODEBUILD_ARGS ?=
 
+# An availability check cannot hide a name the SDK lacks, so code calling an API from iOS 26.5 is
+# compiled only under this condition, defined when the iPhoneOS SDK is 26.5 or later.
+IOS_SDK_CONDITIONS = $(shell xcrun --sdk iphoneos --show-sdk-version 2>/dev/null | \
+	awk -F. '$$1 > 26 || ($$1 == 26 && $$2 >= 5) { print "IPHONEOS_SDK_26_5_OR_LATER" }')
+
 # Zig cross-compilation for C stub
 LINUX_CC ?= zig cc -target x86_64-linux-gnu
 WINDOWS_CC ?= zig cc -target x86_64-windows-gnu
@@ -35,6 +40,7 @@ build-ios:
 			-configuration '$(CONFIG)' \
 			-destination "generic/platform=iOS" \
 			-derivedDataPath "$(DERIVED_DATA)-ios" \
+			$(if $(IOS_SDK_CONDITIONS),SWIFT_ACTIVE_COMPILATION_CONDITIONS='$$(inherited) $(IOS_SDK_CONDITIONS)') \
 			$(XCODEBUILD_ARGS) \
 			build 2>&1 | tee "$(DERIVED_DATA)-ios/build.log"; \
 		\
